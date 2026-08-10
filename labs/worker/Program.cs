@@ -32,7 +32,18 @@ const string DeploymentName = "training-workers";
 /// <summary>
 /// Reads a .env file so you configure the connection once instead of exporting
 /// three variables into every terminal — and this lab wants three terminals.
-/// Real environment variables win, so CI and one-off overrides still work.
+///
+/// The FILE WINS over an already-exported variable, which is the opposite of the
+/// usual convention and is deliberate. `workshop-creds` exports the student's
+/// personal admin key as TEMPORAL_API_KEY into every shell. Session 2 then writes
+/// the Worker's OWN service-account key into this file. If the ambient variable
+/// won, the Worker would quietly keep running as the admin — the lab would pass,
+/// the least-privilege lesson would not happen, and the deny-case demos in "Use
+/// what you built" would succeed when they are supposed to fail. A credential
+/// this file names is a credential the process should use.
+///
+/// To override for a one-off run, edit the file or point at another directory —
+/// exporting the variable no longer does it.
 /// </summary>
 static void LoadDotEnv()
 {
@@ -45,6 +56,7 @@ static void LoadDotEnv()
             continue;
         }
 
+        var replaced = new List<string>();
         foreach (var raw in File.ReadAllLines(file))
         {
             var line = raw.Trim();
@@ -61,13 +73,25 @@ static void LoadDotEnv()
 
             var key = line[..eq].Trim();
             var value = line[(eq + 1)..].Trim().Trim('"', '\'');
-            if (Environment.GetEnvironmentVariable(key) is null)
+
+            var ambient = Environment.GetEnvironmentVariable(key);
+            if (ambient is not null && ambient != value)
             {
-                Environment.SetEnvironmentVariable(key, value);
+                replaced.Add(key);
             }
+
+            Environment.SetEnvironmentVariable(key, value);
         }
 
         Console.WriteLine($"Loaded {file}");
+        if (replaced.Count > 0)
+        {
+            // Say it out loud. Silently shadowing an exported credential is how
+            // you spend an afternoon wondering which key a process is using.
+            Console.WriteLine(
+                $"  overrode exported {string.Join(", ", replaced)} — this file wins");
+        }
+
         return;
     }
 }

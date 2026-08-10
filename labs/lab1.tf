@@ -21,3 +21,27 @@
 #
 # The full configuration is on your session page, personalised with your name.
 # ============================================================================
+# Goes in labs/lab1.tf.
+#
+# The terraform block, provider and API-key variable already live in labs/ —
+# versions.tf and providers.tf. Declaring them again here is a
+# duplicate-declaration error, so this file holds resources only.
+
+resource "temporalcloud_namespace" "lab" {
+  name           = "asb-training-taoguo1-training3"
+  regions        = ["azure-australiaeast"]
+  retention_days = 7
+  api_key_auth   = true
+}
+
+resource "temporalcloud_namespace_tags" "lab" {
+  namespace_id = temporalcloud_namespace.lab.id
+
+  tags = {
+    "provisioner" = "terraform"
+  }
+}
+
+output "namespace_endpoint" {
+  value = temporalcloud_namespace.lab.endpoints
+}

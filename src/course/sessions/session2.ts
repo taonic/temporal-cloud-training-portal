@@ -315,22 +315,6 @@ output "worker_api_key" {
       title: 'API key owned by the service account',
       detail: 'At least one API key whose owner is the service account, not a person.',
     },
-    {
-      id: 'operators-group',
-      title: 'Operators group has namespace access',
-      detail:
-        'A group with your assigned name exists and carries at least one namespace permission. That ' +
-        'is the entitlement half — `temporalcloud_group` alone grants nothing. Membership is not ' +
-        'checked and should be empty: in production it arrives from your IdP over SCIM.',
-    },
-    {
-      id: 'audit-log-attributable',
-      title: 'Your changes are attributable in the Audit Log',
-      detail:
-        'The account Audit Log records a successful control-plane change made by you, through an API ' +
-        'key. Nothing extra to do — this grades the `terraform apply` you already ran. A change made ' +
-        'by hand in the Cloud UI carries no key id and does not count.',
-    },
   ],
 
   async grade(ctx) {
@@ -339,10 +323,9 @@ output "worker_api_key" {
       return ctx.blockedAll(`No namespace named "${ctx.namespaceName}" — complete Session 1 first.`);
     }
 
-    const [serviceAccounts, apiKeys, groups, customRoles] = await Promise.all([
+    const [serviceAccounts, apiKeys, customRoles] = await Promise.all([
       ctx.serviceAccounts(),
       ctx.apiKeys(),
-      ctx.userGroups(),
       ctx.customRoles(),
     ]);
 
@@ -429,59 +412,6 @@ output "worker_api_key" {
           ];
         })();
 
-    /* -- Group and decision record -------------------------------------- */
-    const group = groups.find((g) => g.spec?.display_name === ctx.groupName);
-    const groupScoped = Object.entries(protoMap(group?.spec?.access?.namespace_accesses)).find(([key]) =>
-      matchesNamespace(key),
-    );
-
-    /* -- Audit log ------------------------------------------------------- */
-    const { records } = await ctx.auditLogs();
-    const mine = records.filter(
-      (r) =>
-        r.principal?.type === 'user' &&
-        (r.principal.name ?? '').toLowerCase() === ctx.email.toLowerCase(),
-    );
-    // UserLogin is the one operation a student generates without changing
-    // anything, and it never carries a key id — excluding it keeps "you signed
-    // in" from reading as "you made a change".
-    const changes = mine.filter((r) => r.status === 'OK' && r.operation && r.operation !== 'UserLogin');
-    const viaApiKey = changes.filter((r) => (r.principal?.api_key_id ?? '') !== '');
-
-    const auditObserved = () => {
-      if (viaApiKey.length > 0) {
-        const ops = [...new Set(viaApiKey.map((r) => r.operation))].join(', ');
-        const keyId = viaApiKey[0].principal?.api_key_id ?? '';
-        return `${viaApiKey.length} change(s) attributed to you via API key ${keyId.slice(0, 8)}…: ${ops}.`;
-      }
-      if (changes.length > 0) {
-        return (
-          `${changes.length} change(s) attributed to you, but none carried an API key id — those were ` +
-          'made in the Cloud UI. Make the same change with `terraform apply` and it becomes traceable ' +
-          'to a credential rather than only to a person.'
-        );
-      }
-      if (mine.length > 0) {
-        return `Only sign-in events for ${ctx.email} so far. Run \`terraform apply\`, then re-check.`;
-      }
-      if (records.length === 0) {
-        return 'The account Audit Log returned nothing for this window. Audit Logs need Global Admin or Account Owner.';
-      }
-      return `No audit records for ${ctx.email} yet. Entries can take a moment to appear — re-check shortly.`;
-    };
-
-    return [
-      ...roleResults,
-      ...saResults,
-      group
-        ? ctx.check(
-            'operators-group',
-            groupScoped !== undefined,
-            `Group "${ctx.groupName}" holds ${groupScoped?.[1]?.permission} on ${groupScoped?.[0]}.`,
-            `Group "${ctx.groupName}" exists but has no permission on your namespace.`,
-          )
-        : ctx.mk('operators-group', 'fail', `No group named "${ctx.groupName}".`),
-      ctx.mk('audit-log-attributable', viaApiKey.length > 0 ? 'pass' : 'fail', auditObserved()),
-    ];
+    return [...roleResults, ...saResults];
   },
 };

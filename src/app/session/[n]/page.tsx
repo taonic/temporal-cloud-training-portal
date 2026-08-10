@@ -330,7 +330,9 @@ export default async function SessionPage({
                   Your three values. <code>workshop-creds</code> writes all of them to your shell{' '}
                   <em>and</em> to <code>labs/worker/.env</code>, so there is no file to edit by hand.
                   Run it bare to be prompted (the key is not echoed), or paste the filled-in form
-                  below. Real environment variables still override the file.
+                  below. Where the two disagree, <code>labs/worker/.env</code> wins — from Session 2
+                  it holds the Worker&apos;s own key while your shell still carries your admin one,
+                  and the Worker must run as the Worker.
                 </p>
                 <Code>
                   {`# TEMPORAL_ADDRESS    your namespace id + .tmprl.cloud:7233
