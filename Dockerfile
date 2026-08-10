@@ -17,6 +17,13 @@ RUN pnpm build
 FROM base AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# node:22-slim ships no CA bundle. Node's own TLS carries bundled roots, so the
+# web side and the gRPC Cloud Ops client are unaffected — but the Temporal SDK's
+# native core reads the *system* store and dies with NativeCertsNotFound, which
+# looks like a worker bug rather than a missing package.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 # The Cloud Ops client reads this descriptor set at runtime.
