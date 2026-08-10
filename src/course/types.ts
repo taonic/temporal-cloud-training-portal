@@ -1,0 +1,231 @@
+import type {
+  CloudApiKey,
+  CloudAuditLogRecord,
+  CloudConnectivityRule,
+  CloudCustomRole,
+  CloudNamespace,
+  CloudServiceAccount,
+  CloudUser,
+  CloudUserGroup,
+} from '@/cloud/types';
+import type { NamespaceReader } from '@/cloud/dataplane';
+import type { SnippetLang } from '@/lib/highlight';
+
+export type CheckpointStatus = 'pass' | 'fail' | 'blocked';
+
+export interface CheckpointDef {
+  id: string;
+  title: string;
+  detail: string;
+  /**
+   * True when the Cloud Ops API exposes no evidence for the claim and the
+   * checkpoint trusts the student. Always surfaced in the UI — a grader that
+   * implies it verified something it did not is worse than one that admits it.
+   */
+  selfAttested?: boolean;
+  /**
+   * Stretch goals. Excluded from the verified count so a student who skipped
+   * one doesn't read as having failed the session.
+   */
+  optional?: boolean;
+}
+
+export interface CheckpointResult extends CheckpointDef {
+  selfAttested: boolean;
+  optional: boolean;
+  status: CheckpointStatus;
+  /** What the grader actually observed, so a red check is diagnosable. */
+  observed?: string;
+}
+
+/**
+ * Handed to each session's `grade`. Every account read is memoised, so a
+ * session may ask for the same collection from several checkpoints without
+ * paying for it twice.
+ */
+export interface GradeContext {
+  email: string;
+  /** Per-student resource names, derived from the email. */
+  namespaceName: string;
+  serviceAccountName: string;
+  groupName: string;
+  customRoleName: string;
+  requiredRegion: string;
+
+  namespaces(): Promise<CloudNamespace[]>;
+  /** The student's own lab namespace, if it exists yet. */
+  labNamespace(): Promise<CloudNamespace | undefined>;
+  cloudUser(): Promise<CloudUser | undefined>;
+  apiKeys(): Promise<CloudApiKey[]>;
+  serviceAccounts(): Promise<CloudServiceAccount[]>;
+  userGroups(): Promise<CloudUserGroup[]>;
+  customRoles(): Promise<CloudCustomRole[]>;
+  connectivityRules(): Promise<CloudConnectivityRule[]>;
+  /**
+   * The account Audit Log over the student's access window — the only read that
+   * answers a question about the past rather than about current state. Empty if
+   * the account cannot serve it.
+   */
+  auditLogs(): Promise<{ records: CloudAuditLogRecord[]; truncated: boolean }>;
+  /**
+   * Read-only access to the student's own namespace, for the facts the control
+   * plane cannot see. Undefined when the namespace does not exist yet or was
+   * created without API key authentication.
+   */
+  dataPlane(): Promise<NamespaceReader | undefined>;
+
+  /** Build a result for one of this session's checkpoint ids. */
+  mk(id: string, status: CheckpointStatus, observed?: string): CheckpointResult;
+  /** Sugar for the common pass/fail shape. */
+  check(id: string, ok: boolean, onPass: string, onFail: string): CheckpointResult;
+  /** Marks every checkpoint in the session blocked — used when a prerequisite is missing. */
+  blockedAll(reason: string): CheckpointResult[];
+}
+
+export interface SnippetContext {
+  namespaceName: string;
+  /** `<namespace>.<account>` — what every CLI flag and namespace_accesses key wants. */
+  namespaceId: string;
+  accountId: string;
+  serviceAccountName: string;
+  groupName: string;
+  customRoleName: string;
+  region: string;
+}
+
+/**
+ * One command in a "use it" section.
+ *
+ * These are deliberately ungraded. Nothing a student types into their own
+ * terminal is visible to the Cloud Ops API, and the alternative — the portal
+ * minting itself namespace credentials across the training account just to
+ * watch — costs far more than it teaches. So each step states what should
+ * happen and the student checks their own output.
+ */
+export interface UseStep {
+  label: string;
+  command: string;
+  /** What they should see. For the deny cases, the error IS the lesson. */
+  expect: string;
+}
+
+/**
+ * One step of the Lab itself, for labs whose artifact is a sequence of actions
+ * rather than a file you paste whole.
+ *
+ * `grades` names the checkpoint the step satisfies, and the page renders it as a
+ * badge. That linkage exists because the alternative already bit us: Lab 3's
+ * `set-current-version` — the only action that satisfies `current-version-moved`
+ * — sat in "Use what you built", a section the page labels *not graded*. A
+ * student could finish the Lab exactly as written and still fail the exit check.
+ * Naming the checkpoint on the step makes that drift visible instead of silent,
+ * and `assertLabCommandsGradeRealCheckpoints` fails the build if the id is wrong.
+ */
+export interface LabStep {
+  label: string;
+  /** Omitted for steps that are a decision rather than a command. */
+  command?: string;
+  /** What they should see, so they know to move on. */
+  expect?: string;
+  /** Checkpoint id this step satisfies. */
+  grades?: string;
+}
+
+export interface UseSection {
+  intro: string;
+  steps: UseStep[];
+  /** Optional extra credit for people who finish the lab early. */
+  stretch?: { title: string; body: string; command?: string };
+}
+
+/**
+ * A tool this session needs that earlier sessions did not. Listed only where it
+ * is NEW — repeating "install Terraform" on every page trains people to skip
+ * the box, and the one session that adds something then goes unread.
+ */
+export interface Prerequisite {
+  name: string;
+  /** One line: what this session does with it. */
+  why: string;
+  /** A one-liner where one exists. Shown in a copyable pane. */
+  install?: string;
+  docs?: string;
+}
+
+/**
+ * Documentation worth having open during the lab, grouped by source. Kept on the
+ * session rather than buried in prose so a student who gets stuck has somewhere
+ * obvious to look that is not the instructor.
+ */
+export interface Reference {
+  label: string;
+  url: string;
+  /** Why you would open this one — keeps the list scannable. */
+  note?: string;
+}
+
+export interface ReferenceGroup {
+  source: string;
+  links: Reference[];
+  /**
+   * 'lab' renders the group directly under the lab's code block, where the
+   * argument you are looking up is on screen. 'page' (the default) collects it
+   * into the Reference section at the foot of the page.
+   */
+  placement?: 'lab' | 'page';
+}
+
+export interface SessionDef {
+  number: number;
+  title: string;
+  /** What the student walks away with. */
+  outcome: string;
+  /** Verbatim from course.md. */
+  exitCheck: string;
+  labTitle: string;
+  labMinutes: number;
+  /** Tools this session needs that no earlier session did. */
+  prerequisites?: Prerequisite[];
+  /** Docs to keep open during the lab. */
+  references?: ReferenceGroup[];
+  /**
+   * True when the lab runs `labs/worker`, which needs TEMPORAL_ADDRESS /
+   * _NAMESPACE / _API_KEY. Only those sessions show the Connection details
+   * block — Session 2 drives the `temporal` CLI instead and would just be
+   * carrying an extra card nobody needs.
+   */
+  needsWorker?: boolean;
+  /** Shown above the steps when there is something they must know first. */
+  note?: string;
+  /** Prose instructions. Static, so it cannot carry personalised values. */
+  labSteps?: string[];
+  /**
+   * Structured, personalised steps — used instead of `labSteps` where the lab
+   * IS the commands. Labs 1, 2 and 4 hand over a single file to paste and are
+   * better served by `labSteps` plus `snippet`.
+   */
+  labCommands?: (ctx: SnippetContext) => LabStep[];
+  snippet?: (ctx: SnippetContext) => string;
+  /**
+   * Language the lab snippet is coloured as. Terraform for every session but
+   * the proxy one, whose snippet is `labs/proxy/config.yaml`.
+   */
+  snippetLang?: SnippetLang;
+  /** Exercise what the lab created, rather than only proving it exists. */
+  use?: (ctx: SnippetContext) => UseSection;
+  checkpoints: CheckpointDef[];
+  grade(ctx: GradeContext): Promise<CheckpointResult[]>;
+}
+
+export interface GradeResult {
+  session: number;
+  email: string;
+  expectedNamespace: string;
+  requiredRegion: string;
+  checkedAtMs: number;
+  results: CheckpointResult[];
+  passed: number;
+  objectivePassed: number;
+  objectiveTotal: number;
+  total: number;
+}

@@ -1,0 +1,30 @@
+node_modules/
+.next/
+# NEXT_DIST_DIR target, for building while `pnpm dev` holds .next
+.next-build/
+out/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+.env
+.env.local
+.env*.local
+
+# mTLS material — never commit
+*.pem
+*.key
+*.crt
+
+# .NET build output from labs/worker
+obj/
+bin/
+
+.DS_Store
+
+# labs/worker local config
+labs/worker/.env
+
+course.md
+quiz.md
+nice-to-have.md

@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-surface-background text-content-primary antialiased;
+  /* Temporal's marketing surfaces sit near-black with the brand indigo bleeding
+     in from the edges rather than a saturated gradient behind the content. */
+  background-image:
+    radial-gradient(48rem 30rem at 12% -12%, rgba(68, 76, 231, 0.22), transparent 70%),
+    radial-gradient(36rem 24rem at 92% -6%, rgba(68, 76, 231, 0.1), transparent 70%);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line-subtle/50 bg-surface-raised/70 backdrop-blur-sm;
+  }
+
+  .label {
+    @apply text-[11px] font-medium uppercase tracking-[0.16em] text-content-subtle;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-line-subtle bg-surface-primary/70 px-3.5 py-2.5
+           text-[15px] text-content-primary placeholder:text-content-faint outline-none
+           transition focus:border-brand focus:ring-2 focus:ring-brand/30;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium
+           transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply btn bg-action text-white hover:bg-action-hover active:bg-action-active;
+  }
+
+  .btn-ghost {
+    @apply btn border border-line-subtle text-content-body
+           hover:border-line-secondary hover:bg-action-ghostActive/40 hover:text-content-primary;
+  }
+
+  .prose-body p {
+    @apply mb-3 text-[15px] leading-7 text-content-body last:mb-0;
+  }
+
+  /* The brand mark: a typographic lockup, not a reproduction of the logo. */
+  .wordmark {
+    @apply inline-flex items-center gap-2 text-[13px] font-medium tracking-tight text-content-secondary;
+  }
+  .wordmark-dot {
+    @apply block h-2.5 w-2.5 rounded-[3px] bg-brand;
+    box-shadow: 0 0 0 3px rgba(68, 76, 231, 0.18);
+  }
+}
+
+pre {
+  @apply overflow-x-auto;
+}
+
+/* Syntax colour for the lab snippets (Terraform, and the proxy's YAML).
+   ---------------------------------------------------------------------------
+   Derived from the brand palette rather than a stock editor theme: indigo for
+   the words that open a block, and a hue for each of the three things a student
+   actually has to get right — the name of an attribute, the literal they set it
+   to, and the reference that ties one resource to another.
+
+   Comment sits one step *below* the default body colour and code sits one step
+   above it, so the hierarchy reads "this is what you type, that is why". Three
+   of the six snippets are entirely commentary; they simply settle at the muted
+   end rather than looking unstyled. */
+.code-hl {
+  --syn-comment: #8fa3c0; /* content-secondary */
+  --syn-keyword: #9aa0f5; /* brand-soft */
+  --syn-attr: #f8fafc; /*    content-primary — the key you are setting */
+  --syn-string: #7fd6a4; /*  DERIVED: success, desaturated to sit beside indigo */
+  --syn-literal: #fec118; /* warning — numbers, true/false/null */
+  --syn-ref: #6fb7de; /*     DERIVED: a blue clear of the brand indigo */
+  --syn-punct: #667ca1; /*   content-subtle — braces recede */
+}
+
+.code-hl .tok-comment {
+  color: var(--syn-comment);
+}
+.code-hl .tok-keyword {
+  color: var(--syn-keyword);
+  font-weight: 500;
+}
+.code-hl .tok-attr {
+  color: var(--syn-attr);
+}
+.code-hl .tok-string {
+  color: var(--syn-string);
+}
+.code-hl .tok-literal {
+  color: var(--syn-literal);
+}
+.code-hl .tok-ref {
+  color: var(--syn-ref);
+}
+.code-hl .tok-punct {
+  color: var(--syn-punct);
+}
+
+::selection {
+  background: rgba(68, 76, 231, 0.35);
+}
+
+/* Keep long namespace ids and endpoints from forcing a horizontal page scroll. */
+code {
+  overflow-wrap: anywhere;
+}

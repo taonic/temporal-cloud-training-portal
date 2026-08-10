@@ -1,0 +1,44 @@
+# Local observability stack for Lab 5.
+#
+#   docker compose up -d
+#   Prometheus  http://localhost:9090
+#   Grafana     http://localhost:3030   (admin / admin)
+#
+# Both host ports are overridable, because on a developer laptop something is
+# always already listening. If you get "address already in use":
+#
+#   GRAFANA_PORT=3031 docker compose up -d
+#
+# or put GRAFANA_PORT=3031 in a .env file next to this one — compose reads it
+# automatically. See README.md.
+#
+# Everything is local. Your worker exposes SDK metrics on host port 9464 and
+# Prometheus scrapes them from inside the container via host.docker.internal.
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    ports:
+      - '${PROMETHEUS_PORT:-9090}:9090'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # host.docker.internal exists on Docker Desktop; this line makes it work on
+    # Linux too, where it otherwise silently resolves to nothing.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    # 3030 rather than 3000 (the training portal) or 3001 (commonly taken).
+    ports:
+      - '${GRAFANA_PORT:-3030}:3000'
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

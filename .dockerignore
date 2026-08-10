@@ -1,0 +1,18 @@
+# Critical: without this, `COPY . .` in the build stage overwrites the
+# Linux node_modules from the deps stage with the host's macOS-built ones,
+# including @temporalio/core-bridge's native binary.
+node_modules
+.next
+out
+dist
+
+.git
+.env
+.env.local
+.env*.local
+*.pem
+*.key
+*.crt
+
+*.tsbuildinfo
+.DS_Store

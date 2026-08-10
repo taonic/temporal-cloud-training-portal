@@ -1,0 +1,73 @@
+# Temporal Proxy — Lab 4.
+#
+# Workers connect to this gateway in plaintext, with no credentials and a SHORT
+# namespace name. The proxy adds TLS, the API key, and the namespace rewrite on
+# the way to Temporal Cloud. That is the point of the pattern: connection
+# details and key material leave your application entirely.
+#
+# Export these in the terminal you run the proxy from (NOT labs/worker/.env —
+# the proxy wants the short namespace name, the worker's file holds the full one):
+#
+#   export TEMPORAL_NAMESPACE=<your namespace short name>   # e.g. training-tao
+#   export TEMPORAL_ACCOUNT=<account id>                    # e.g. bvmon
+#   export TEMPORAL_API_KEY=<your Temporal Cloud API key>
+#
+# Then, from the repo root:
+#
+#   docker run --rm -p 7233:7233 \
+#     -v "$PWD/labs/proxy/config.yaml:/config.yaml:ro" \
+#     -e TEMPORAL_NAMESPACE -e TEMPORAL_ACCOUNT -e TEMPORAL_API_KEY \
+#     temporalio/temporal-proxy:latest --config /config.yaml
+
+hostPort: 127.0.0.1:7233
+
+routing:
+  default: cloud # namespaced requests -> per-namespace endpoint
+  system: system # namespace-less calls (GetSystemInfo on connect)
+
+upstreams:
+  # The endpoint is derived per request from the translated namespace, so this
+  # one entry serves any number of namespaces.
+  - name: cloud
+    hostPort: "{{ .RemoteNamespace }}.tmprl.cloud:7233"
+    tls: {}
+    namespaces:
+      rules:
+        # training-tao -> training-tao.bvmon
+        suffix: .$TEMPORAL_ACCOUNT
+    credentials:
+      static:
+        apiKey: $TEMPORAL_API_KEY
+
+  # Namespace-less calls have no namespace to derive a host from, so they need a
+  # fixed endpoint. Any namespace in the account will serve them.
+  - name: system
+    hostPort: ${TEMPORAL_NAMESPACE}.${TEMPORAL_ACCOUNT}.tmprl.cloud:7233
+    tls: {}
+    credentials:
+      static:
+        apiKey: ${TEMPORAL_API_KEY}
+
+# ---------------------------------------------------------------------------
+# STEP 2 OF THE LAB. Leave this commented for the first run, look at a payload
+# in the Cloud UI, then uncomment it, restart the proxy, and look again.
+#
+# The key below is a throwaway held in this file. The "testing://" scheme is a
+# local in-process key with no KMS behind it — the proxy's own docs say "for
+# tests and local runs only", and anyone who can read this file can decrypt
+# every payload. It exists so the mechanism is visible in 15 minutes.
+#
+# What you would run in production is the same three lines with a different URI:
+#
+#   uri: azurekeyvault://<vault>.vault.azure.net/keys/<key>
+#
+# and the proxy wraps every data encryption key through Key Vault instead.
+# ---------------------------------------------------------------------------
+#
+# encryption:
+#   enabled: true
+#   cacheSize: 200
+#   default:
+#     uri: testing://KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=
+#     duration: 1h
+#     renewBefore: 15m

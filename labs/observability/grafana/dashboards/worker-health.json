@@ -1,0 +1,190 @@
+{
+  "uid": "temporal-worker-health",
+  "title": "Temporal Worker health",
+  "tags": [
+    "temporal",
+    "training"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "text",
+      "title": "Read this first",
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Metric names here match what `labs/worker` actually emits, verified against the endpoint. Two things to know before editing a query:\n\n- **Counters have no `_total`** \u2014 `temporal_workflow_completed`, not `..._total`. The OpenMetrics convention says otherwise and so does much of the internet, but Temporalio 1.17 does not add it, and `HasCounterTotalSuffix` makes no difference either way.\n- **Histograms end `_seconds_bucket`** only because the starter sets `HasUnitSuffix` and `UseSecondsForDuration`; the .NET defaults give you unsuffixed integer milliseconds.\n- **Gauges never take a suffix**: `temporal_num_pollers`.\n\nA wrong name returns an empty graph with no error. `curl -s localhost:9464/metrics | grep -E '^temporal_' | cut -d'{' -f1 | sort -u`"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Workflow task schedule-to-start p99 \u2014 is work waiting for workers?",
+      "description": "The queue, not the work. This is the best 'do I need more workers' signal, and it is your side of the boundary rather than Temporal's.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum(rate(temporal_workflow_task_schedule_to_start_latency_seconds_bucket[5m])) by (le, task_queue))",
+          "legendFormat": "{{task_queue}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Sticky cache hit rate \u2014 is replay being avoided?",
+      "description": "A falling hit rate means workflows are being evicted and replayed from history, which costs latency and CPU for no functional change.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(rate(temporal_sticky_cache_hit[5m])) or vector(0)) / clamp_min((sum(rate(temporal_sticky_cache_hit[5m])) or vector(0)) + (sum(rate(temporal_sticky_cache_miss[5m])) or vector(0)), 0.001)",
+          "legendFormat": "hit rate"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Task slots available \u2014 is the worker saturated?",
+      "description": "A gauge, so NO _total suffix. Slots pinned at zero means the worker is the bottleneck; slots always full means you sized it larger than you need.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(temporal_worker_task_slots_available) by (worker_type)",
+          "legendFormat": "{{worker_type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Outcomes \u2014 completed vs failed vs task failures",
+      "description": "temporal_workflow_task_execution_failed is the one that catches non-determinism. It climbs while the workflow is stuck but neither completed nor failed, which is why error-rate alerts miss it. The `or vector(0)` is not decoration: a counter that has never fired emits no series at all, so without it the whole panel goes blank the moment nothing is failing \u2014 which is exactly when you are looking at it.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 8
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(temporal_workflow_completed[5m])) or vector(0)",
+          "legendFormat": "completed"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(temporal_workflow_failed[5m])) or vector(0)",
+          "legendFormat": "failed"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(temporal_workflow_task_execution_failed[5m])) or vector(0)",
+          "legendFormat": "workflow task failures (stuck)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Pollers (gauge \u2014 no _total)",
+      "description": "Zero pollers means nothing is picking up work. First thing to check when someone says 'Temporal is broken'.",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(temporal_num_pollers) by (poller_type)",
+          "legendFormat": "{{poller_type}}"
+        }
+      ]
+    }
+  ]
+}

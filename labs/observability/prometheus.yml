@@ -1,0 +1,21 @@
+global:
+  # Short interval so a 15-minute lab actually shows a curve.
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'temporal-sdk'
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      # The worker's Prometheus endpoint, on the host rather than in a container:
+      #   dotnet run -- worker --metrics-port 9464
+      - targets: ['host.docker.internal:9464']
+        labels:
+          group: 'sdk-metrics'
+
+      # Run a second worker on 9465 to see per-worker metrics side by side.
+      # Prometheus reports this target as DOWN until you do — that is expected.
+      - targets: ['host.docker.internal:9465']
+        labels:
+          group: 'sdk-metrics'

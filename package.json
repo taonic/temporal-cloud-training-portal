@@ -1,0 +1,48 @@
+{
+  "name": "temporal-cloud-training-portal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@8.6.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n web,worker -c cyan,magenta \"pnpm dev:web\" \"pnpm dev:worker\"",
+    "dev:web": "next dev",
+    "dev:worker": "tsx watch --clear-screen=false --include \"src/temporal/workflows/**/*.ts\" src/temporal/worker.ts",
+    "build": "next build",
+    "start": "tsx src/server.ts",
+    "worker": "tsx src/temporal/worker.ts",
+    "check": "pnpm typecheck && pnpm check:wire",
+    "typecheck": "tsc --noEmit",
+    "check:wire": "tsx scripts/check-wire.ts",
+    "proto:vendor": "node scripts/vendor-protos.mjs",
+    "ops:preflight": "tsx scripts/preflight.ts"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.12.5",
+    "@grpc/proto-loader": "^0.7.13",
+    "@next/env": "^15.1.6",
+    "@temporalio/activity": "^1.22.0",
+    "@temporalio/client": "^1.22.0",
+    "@temporalio/common": "^1.22.0",
+    "@temporalio/worker": "^1.22.0",
+    "@temporalio/workflow": "^1.22.0",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

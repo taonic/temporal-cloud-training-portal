@@ -1,0 +1,14 @@
+apiVersion: 1
+
+providers:
+  - name: 'temporal-training'
+    orgId: 1
+    folder: 'Temporal'
+    type: file
+    disableDeletion: false
+    # Edit the JSON and Grafana reloads it — useful when students want to add
+    # their own panel during the lab.
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

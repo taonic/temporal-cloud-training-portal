@@ -1,0 +1,10 @@
+# State holds resource ids and can hold secrets. Never commit it.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Your API key lives here.
+terraform.tfvars
+*.auto.tfvars

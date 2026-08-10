@@ -1,0 +1,55 @@
+app = "temporal-cloud-training-portal"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  # The Temporal worker lives in this process. A stopped machine means no
+  # sweeper and no pending 48-hour revocations firing, so it must stay up.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # Liveness only. /api/health returns 200 whenever the process is serving and
+  # deliberately does NOT fail on a Temporal or Cloud Ops outage — restarting
+  # cannot fix those, and a crash loop would also kill the worker.
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+# Non-secret configuration. Secrets are set separately — see DEPLOY.md.
+[env]
+  PORTAL_BASE_URL = "https://temporal-cloud-training-portal.fly.dev"
+  PORTAL_LINK_TIMEZONE = "Australia/Sydney"
+  # Patterns: "example.com" (exact), "*.example.com" (subdomains), "*" (any).
+  # Empty denies everything. "*" means the rotating link and the seat cap are
+  # the only controls on who receives Global Admin.
+  PORTAL_ALLOWED_EMAIL_DOMAINS = "*"
+  PORTAL_DAILY_SEAT_CAP = "25"
+  ACCESS_TTL_HOURS = "48"
+
+  TRAINING_ACCOUNT_ID = "bvmon"
+  CLOUD_OPS_ADDRESS = "saas-api.tmprl.cloud:443"
+  CLOUD_OPS_API_VERSION = "v0.19.1"
+
+  TEMPORAL_NAMESPACE = "tao.a2dd6"
+  TEMPORAL_ADDRESS = "ap-southeast-2.aws.api.temporal.io:7233"
+  TEMPORAL_TASK_QUEUE = "training-portal"
+
+  # Start at dry-run for the first deploy; flip to live once you have read a
+  # sweep report on /instructor.
+  SWEEPER_MODE = "dry-run"
+  SWEEPER_INTERVAL_MINUTES = "15"
+
+  LAB_NAMESPACE_PREFIX = "training-"
+  LAB_REQUIRED_REGION = "azure-australiaeast"
