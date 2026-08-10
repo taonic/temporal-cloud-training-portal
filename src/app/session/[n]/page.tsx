@@ -122,6 +122,27 @@ export default async function SessionPage({
     id ? session.checkpoints.find((c) => c.id === id)?.title : undefined;
   const use = snippetContext && session.use ? session.use(snippetContext) : undefined;
 
+  /**
+   * Prerequisites are the one personalised block that has to render even when
+   * the link carries no email — they are what a student reads *before* they are
+   * set up. So the function form falls back to placeholders rather than
+   * vanishing, which is what gating it on `snippetContext` would do.
+   */
+  const prerequisites =
+    typeof session.prerequisites === 'function'
+      ? session.prerequisites(
+          snippetContext ?? {
+            namespaceName: '<your-namespace>',
+            namespaceId: `<your-namespace>.${cfg.TRAINING_ACCOUNT_ID}`,
+            accountId: cfg.TRAINING_ACCOUNT_ID,
+            serviceAccountName: '<your-namespace>-worker',
+            groupName: '<your-namespace>-operators',
+            customRoleName: '<your-namespace>-worker-role',
+            region: cfg.LAB_REQUIRED_REGION,
+          },
+        )
+      : session.prerequisites;
+
   const labRefs = (session.references ?? []).filter((r) => r.placement === 'lab');
   const pageRefs = (session.references ?? []).filter((r) => r.placement !== 'lab');
 
@@ -181,7 +202,7 @@ export default async function SessionPage({
       <div className="space-y-8">
         {/* Only what this session adds. Sessions 3, 4 and 6 introduce no new
             tooling and show nothing here. */}
-        {session.prerequisites && session.prerequisites.length > 0 && (
+        {prerequisites && prerequisites.length > 0 && (
           <section className="card p-6">
             <div className="mb-1.5 flex items-center gap-2.5">
               <h2 className="text-base font-semibold text-white">Prerequisites</h2>
@@ -193,7 +214,7 @@ export default async function SessionPage({
             </p>
 
             <ul className="space-y-5">
-              {session.prerequisites.map((pre) => (
+              {prerequisites.map((pre) => (
                 <li key={pre.name} className="border-l-2 border-line-subtle/60 pl-4">
                   <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
                     <span className="text-[14px] font-medium text-content-primary">{pre.name}</span>
@@ -306,25 +327,28 @@ export default async function SessionPage({
               <div className="mb-6 rounded-lg border border-line-subtle/50 bg-surface-table/25 p-4">
                 <div className="label mb-2">Connection details</div>
                 <p className="mb-3 text-[13px] leading-6 text-content-secondary">
-                  The steps below run <code>labs/worker</code>, which reads these three values. Set
-                  them once with{' '}
-                  <code className="rounded bg-surface-table/50 px-1.5 py-0.5 font-mono text-brand-soft">
-                    cd labs/worker &amp;&amp; cp .env.example .env
-                  </code>{' '}
-                  and paste this in. Real environment variables still override the file.
+                  Your three values. <code>workshop-creds</code> writes all of them to your shell{' '}
+                  <em>and</em> to <code>labs/worker/.env</code>, so there is no file to edit by hand.
+                  Run it bare to be prompted (the key is not echoed), or paste the filled-in form
+                  below. Real environment variables still override the file.
                 </p>
                 <Code>
-                  {`# labs/worker/.env
-TEMPORAL_ADDRESS=${snippetContext.namespaceId}.tmprl.cloud:7233
-TEMPORAL_NAMESPACE=${snippetContext.namespaceId}`}
+                  {`# TEMPORAL_ADDRESS    your namespace id + .tmprl.cloud:7233
+# TEMPORAL_NAMESPACE  the namespace id itself — <namespace>.<account>,
+#                     account suffix included. Leaving it off is the
+#                     single most common way to lose ten minutes here.
+# TEMPORAL_API_KEY    your key from Session 1. Shown once, never again.
+
+workshop-creds ${snippetContext.namespaceId}.tmprl.cloud:7233 ${snippetContext.namespaceId} <YOUR-API-KEY>`}
                 </Code>
                 <p className="mt-3 text-[13px] leading-6 text-content-subtle">
                   From Session 2 onward that is the <em>Worker&apos;s own</em> key, not yours —
                   Session 2 writes this file for you with{' '}
                   <code>terraform output -raw worker_api_key</code>. Before then, your personal key
                   from Session 1 works. No Cloud namespace yet? Every mode also runs against a local
-                  dev server: <code>temporal server start-dev</code>, then{' '}
-                  <code>dotnet run -- worker --local</code>.
+                  dev server: <code>dev-server-up</code>, then{' '}
+                  <code>dotnet run -- worker --local</code>. Stop it with <code>dev-server-down</code>{' '}
+                  before Session 4 — the proxy wants port 7233.
                 </p>
               </div>
             )}

@@ -97,11 +97,22 @@ export const session2: SessionDef = {
     'Give it `write` on your namespace. This is the grant that actually matters: `write` is what lets a Worker poll task queues and complete tasks.',
     'Issue an API key owned by the service account, not by you. A key owned by a person dies with the person.',
     'Create a group for your on-call operators, and a separate access block granting it namespace permission. The group is the identity; the access block is the entitlement. Membership stays empty — that half comes from your IdP over SCIM.',
+    'Put the configuration below into `labs/lab2.tf` — a new file alongside `lab1.tf`, not a replacement for it. Then run `terraform plan` and read it before applying.',
     'Run `terraform apply`, then hit Re-check. Work through "Use what you built" at the foot of the page afterwards — that is where the lesson actually lands.',
   ],
 
   snippetLang: 'hcl',
-  snippet: ({ serviceAccountName, groupName, customRoleName, namespaceId }) => `# The control-plane access a Worker needs, which is very nearly none.
+  snippet: ({ serviceAccountName, groupName, customRoleName, namespaceId }) => `# Goes in labs/lab2.tf.
+#
+# The terraform block, provider and API-key variable already live in labs/ —
+# versions.tf and providers.tf. Declaring them again here is a
+# duplicate-declaration error, so this file holds resources only.
+#
+# It references temporalcloud_namespace.lab from lab1.tf. Terraform reads every
+# .tf file in the directory as one module, so that works — as long as lab1.tf is
+# still there. Do not move Session 1's resources into this file.
+
+# The control-plane access a Worker needs, which is very nearly none.
 # A Worker polls a task queue and completes tasks; it never calls the Cloud Ops
 # API to do its job. So this grants ONE action, on ONE namespace, by id.
 # No allow_all, and no account-scoped grant — a Worker does not enumerate the

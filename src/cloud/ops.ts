@@ -79,11 +79,25 @@ export async function createUser(args: {
   email: string;
   role: AccountRole;
   asyncOperationId: string;
+  /**
+   * Custom roles granted alongside the predefined role. Session 2 needs one —
+   * see STUDENT_CUSTOM_ROLE_IDS. `custom_roles` lives on account_access; the
+   * top-level spec.access.custom_roles field is deprecated and ignored after
+   * api-cloud v0.12.0, and a value there is dropped in silence.
+   */
+  customRoleIds?: string[];
 }): Promise<{ userId: string; asyncOperation?: AsyncOperation }> {
   const res = await call<any>('createUser', {
     spec: {
       email: args.email,
-      access: { account_access: { role: args.role } },
+      access: {
+        account_access: {
+          role: args.role,
+          // Omitted rather than sent empty: an empty repeated field is
+          // indistinguishable from "no change" and costs nothing to leave out.
+          ...(args.customRoleIds?.length ? { custom_roles: args.customRoleIds } : {}),
+        },
+      },
     },
     async_operation_id: args.asyncOperationId,
   });

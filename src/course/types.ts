@@ -184,8 +184,13 @@ export interface SessionDef {
   exitCheck: string;
   labTitle: string;
   labMinutes: number;
-  /** Tools this session needs that no earlier session did. */
-  prerequisites?: Prerequisite[];
+  /**
+   * Tools this session needs that no earlier session did. The function form gets
+   * the student's own names — Session 1's first prerequisite is `workshop-creds`,
+   * and a student typing their address from a format string rather than reading
+   * their real one is the mistake this whole block exists to prevent.
+   */
+  prerequisites?: Prerequisite[] | ((ctx: SnippetContext) => Prerequisite[]);
   /** Docs to keep open during the lab. */
   references?: ReferenceGroup[];
   /**

@@ -16,7 +16,7 @@ import type { SessionDef } from '../types';
  * not Build ID compatibility sets — the latter are deprecated in every SDK and
  * never reached GA. Worker Deployments are themselves still public preview.
  *
- * Runs on a laptop against the student's own Cloud namespace. KEDA is the one
+ * Runs in the student's sandbox against their own Cloud namespace. KEDA is the one
  * part that genuinely needs Kubernetes, so it is an instructor demo.
  */
 export const session3: SessionDef = {
@@ -30,7 +30,7 @@ export const session3: SessionDef = {
   needsWorker: true,
 
   note:
-    'Laptop-scale: two worker processes on your machine against your own Cloud namespace. That is ' +
+    'Sandbox-scale: two worker processes in your sandbox against your own Cloud namespace. That is ' +
     'enough to create a real Worker Deployment with two versions and shift traffic between them — ' +
     'KEDA is the only part that needs a cluster, and you will watch that rather than run it.',
 

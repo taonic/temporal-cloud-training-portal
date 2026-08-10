@@ -16,35 +16,41 @@ export const session1: SessionDef = {
   labMinutes: 15,
   needsWorker: true,
 
-  prerequisites: [
+  prerequisites: (ctx) => [
     {
-      name: 'Temporal CLI',
-      why: 'Every session drives it. `temporal workflow …` talks to your namespace.',
-      install: 'brew install temporal\ntemporal --version',
-      docs: 'https://docs.temporal.io/cli/setup-cli',
+      name: 'Run workshop-creds first — nothing works before it',
+      why:
+        'The sandbox does not know who you are. It needs three values, and two of them are yours ' +
+        `alone. **Address** — \`${ctx.namespaceId}.tmprl.cloud:7233\`. **Namespace** — ` +
+        `\`${ctx.namespaceId}\`, where the \`.${ctx.accountId}\` account suffix is part of the name; ` +
+        'dropping it fails with an authorization error that reads exactly like a bad key, and is the ' +
+        'most common way to lose ten minutes here. **API key** — the one you create in step 1 below, ' +
+        'shown once and never again. Paste the command below with your key in place of the ' +
+        'placeholder, or run `workshop-creds` with no arguments to be prompted for all three (the ' +
+        'key is not echoed). From those it writes four variables to the two places that read them: ' +
+        'your shell (`TEMPORAL_API_KEY` for both CLIs, `TEMPORAL_CLOUD_API_KEY` for the Terraform ' +
+        'provider — two names, one key) and `labs/worker/.env` for the C# worker.',
+      install:
+        `workshop-creds ${ctx.namespaceId}.tmprl.cloud:7233 ${ctx.namespaceId} <YOUR-API-KEY>\n` +
+        'source ~/.workshop-env',
     },
     {
-      name: 'Temporal Cloud CLI extension',
-      why: 'A SEPARATE install from the CLI above. It adds `temporal cloud …` — namespaces, users, service accounts — which Sessions 1 and 2 lean on heavily.',
-      install: 'brew install temporalio/prerelease/temporal-cloud\ntemporal cloud --version',
-      docs: 'https://docs.temporal.io/cli/setup-cli#install-the-temporal-cloud-extension',
+      name: 'Then workshop-check — before you write any Terraform',
+      why: 'Probes the tools, the outbound gRPC on 7233 that every lab depends on, and whether your key reaches the Cloud Ops API. Green here means a failure later is your Terraform, not your setup. Expect one `warn`: your namespace does not exist yet, because `terraform apply` is what creates it. That line turns green when you re-run this after the lab; everything else should be green now.',
+      install: 'workshop-check',
     },
     {
-      name: 'Terraform 1.5+',
-      why: 'The lab provisions your namespace as code rather than by clicking.',
-      docs: 'https://developer.hashicorp.com/terraform/install',
-    },
-    {
-      name: '.NET SDK 8',
-      why: 'For the stretch goal, and for Sessions 3 to 6. `labs/worker` is a C# worker.',
-      docs: 'https://dotnet.microsoft.com/download',
+      name: 'Everything else is already installed',
+      why: 'The Temporal CLI and its `cloud` extension, Terraform, .NET 8 and Docker are all in the sandbox at the right version, and `terraform init` and `dotnet build` have already run. Work in the Terminal and Editor tabs — not on your laptop, which needs nothing installed on it. `workshop-help` reprints the command list.',
+      install: 'workshop-help',
     },
   ],
 
   labSteps: [
     'Create an API Key for yourself in the Cloud UI (Settings → API Keys). **Copy it into your password manager now** — Temporal shows it once and there is no way to read it back. Everything you do for the next two days authenticates with this key.',
-    'Put both exports in your shell startup file (`~/.zshrc` or `~/.bashrc`), then open a new terminal: `export TEMPORAL_API_KEY=<YOUR KEY>` for the `temporal` CLIs, and `export TEMPORAL_CLOUD_API_KEY=$TEMPORAL_API_KEY` for the Terraform provider. Two names, one key — later labs run three or four terminals at once, and a value exported in only one of them is a confusing way to lose an afternoon.',
-    'Run `terraform init` once. The provider and version pin are already set up in `labs/` — you write the resources.',
+    'In the sandbox Terminal tab, run `workshop-creds`. It asks for three values: the **address** (`<namespace>.<account>.tmprl.cloud:7233`), the **namespace** (`<namespace>.<account>` — account suffix included) and the **API key** from step 1. The Connection details block further down this page has the first two filled in with your own namespace, as a command you can paste whole. It sets `TEMPORAL_API_KEY` for the `temporal` CLIs and `TEMPORAL_CLOUD_API_KEY` for the Terraform provider — two names, one key — and writes `labs/worker/.env` for the C# worker. It writes a file rather than exporting into one shell on purpose: later labs run three or four terminals at once, and a value set in only one of them is a confusing way to lose an afternoon.',
+    'Run `workshop-check`. Tools, outbound 7233 and the Cloud Ops API should all be green before you write any Terraform. **Your namespace will show a `warn` saying it does not exist yet — that is correct at this point**, because the `terraform apply` below is what creates it. Re-run `workshop-check` after the apply and that line goes green too.',
+    'Run `labs` to reach `/workspace/workshop/labs`. `terraform init` is already done and the provider and version pin are set up — you write the resources.',
     'Put the configuration below into `labs/lab1.tf`, then run `terraform plan` and read it before applying.',
     'Run `terraform apply`.',
     'Hit "Re-check" below. Every objective checkpoint should go green within a few seconds of apply completing.',
@@ -166,7 +172,7 @@ output "namespace_endpoint" {
         'your namespace and run it — that is the difference between "provisioned" and "working". ' +
         'Note the worker must be running before you start the workflow; with no worker polling, the ' +
         'workflow sits in schedule-to-start and goes nowhere, which is itself worth seeing once.',
-      command: `cd labs/worker\ncp .env.example .env    # then paste the Connection details block above\n\ndotnet run -- worker      # terminal 1\ndotnet run -- start       # terminal 2 \n# now run temporal workflow list command above or UI to see the workflow complete`,
+      command: `cd labs/worker\n\ndotnet run -- worker      # terminal 1\ndotnet run -- start       # terminal 2 \n# now run temporal workflow list command above or UI to see the workflow complete`,
     },
   }),
 

@@ -32,6 +32,53 @@ These are the two that can kill a workshop date, because someone else has to act
 - [ ] **Confirm Custom Roles are enabled on `bvmon`.** They are **Pre-release**. Session 2 is built
       around them and its custom-role checkpoints simply cannot pass without them. Preflight fails
       loudly if they're missing — run it now, not in week three.
+- [ ] **Delegate custom-role administration to Global Admin.** Enabled is not sufficient.
+      [Custom role administration defaults to the Account Owner](https://docs.temporal.io/cloud/manage-access/custom-roles#delegating-custom-roles),
+      and students are invited as Global Admin, so Session 2's first `terraform apply` dies with
+      `rpc error: code = PermissionDenied desc = request unauthorized` on
+      `temporalcloud_custom_role`. Preflight does **not** catch this: it authenticates as Account
+      Owner, which can always do it.
+
+      As Account Owner, create the delegation role once from `scripts/custom-role-delegation.json`
+      and note the role id it returns:
+
+      ```bash
+      temporal cloud custom-role apply --spec @scripts/custom-role-delegation.json \
+        --api-key $TEMPORAL_API_KEY
+      ```
+
+      Only `create` and `list` go in that spec, and the reason is a trap worth knowing: the
+      [permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions)
+      has **two** tables. `cloud.customrole.create` and `cloud.customrole.list` are *Account*-scoped.
+      `cloud.customrole.get`, `.update` and `.delete` are scoped to the **Custom Role** resource
+      type, not the account, so putting them in an account-scoped grant is rejected outright:
+
+      ```
+      InvalidArgument desc = invalid action: cloud.customrole.update for resource type: account
+      ```
+
+      Then put the returned role id in `STUDENT_CUSTOM_ROLE_IDS` and redeploy. Every invitation
+      from then on carries it — `createUser` sends it as `access.account_access.custom_roles`.
+      One-off assignment for someone already invited, remembering that `set-custom-roles`
+      **replaces** the list rather than appending:
+
+      ```bash
+      temporal cloud user set-custom-roles --user-email STUDENT@EXAMPLE.COM \
+        --custom-role <ROLE_ID> --api-key $TEMPORAL_API_KEY
+      ```
+
+      You need that command for anyone the portal *adopted* rather than created — an existing Cloud
+      user is returned as-is by `inviteGlobalAdmin`, which never calls CreateUser and so never
+      attaches the roles. The activity logs a warning when that happens.
+
+      The docs call out the privilege-escalation risk in delegating this, and they are right: a
+      principal that can create and assign roles can grant itself anything. In a throwaway training
+      account where every student is already Global Admin for 48 hours, that is not a new exposure.
+      Do not copy the pattern into a real account.
+
+      Not delegating is not really an option. Pre-creating one shared role as Account Owner still
+      leaves students unable to attach it to their service account without `cloud.customrole.assign`,
+      so it narrows the delegation rather than avoiding it.
 
 ### T-minus 1 week
 
@@ -39,25 +86,26 @@ These are the two that can kill a workshop date, because someone else has to act
       Admin can delete a Global Admin. Preflight reports which you are.
 - [ ] **Check API key expiry.** Preflight warns below 7 days. The Cloud Ops key is a personal key —
       it dies with your account and expires on its own schedule.
-- [ ] **Session 5 needs Docker only.** It uses SDK metrics into a local Prometheus + Grafana
+- [ ] **Session 5 needs Docker only.** It uses SDK metrics into a Prometheus + Grafana pair
       (`labs/observability`), so there is no account-global metrics CA to set and no client
-      certificates to distribute. Confirm attendees can run `docker compose up` and pull
-      `prom/prometheus` and `grafana/grafana` — a locked-down network is the only thing that breaks it.
-- [ ] **Send attendees the prerequisites.** Each session page now lists what it newly needs, at the
-      top, with install commands — but they should arrive with them already done:
-
-      ```bash
-      brew install temporal                              # the CLI
-      brew install temporalio/prerelease/temporal-cloud  # the Cloud extension — a SEPARATE install
-      docker pull temporalio/temporal-proxy:latest        # Session 4
-      ```
-
-      Plus Terraform 1.5+, .NET SDK 8, Docker, and a `git clone` of this repo.
-      `course.md` lists the CLI but not the Cloud extension, and every "Use what you built"
-      section needs it.
-- [ ] **Session 4 needs no infrastructure.** It runs `temporalio/temporal-proxy` as a local
-      container with a throwaway in-process key, so there is no AKS cluster, no Azure
-      Key Vault and no certificates. Confirm attendees can pull the container image.
+      certificates to distribute. Both run as containers in the sandbox — `obs-up` starts them and
+      the images are pre-pulled at preset build time, so a locked-down attendee network is no
+      longer the thing that breaks it.
+- [ ] **Attendees install nothing.** The workshop runs in the Instruqt track
+      `temporal-control-plane-workshop`, on the `temporal-cloud-platform-workshop` sandbox preset.
+      The Temporal CLI and its `cloud` extension, Terraform, .NET 8, Docker and Compose are all
+      baked into the image at pinned versions, with `terraform init` and `dotnet build` already
+      run and the proxy, Prometheus and Grafana images pre-pulled. Attendees need a browser and
+      the track link. What they still have to do themselves is `workshop-creds` and
+      `workshop-check` at the top of Session 1 — see below.
+- [ ] **Verify the track boots.** Launch it yourself once, end to end, and run `workshop-check` in
+      the Terminal tab. It probes the tools, outbound gRPC on 7233 and the Cloud Ops API. This is
+      the check that used to be an email asking twenty people to run `nc -vz`; it is now one
+      sandbox launch, so there is no excuse for finding out on the day.
+- [ ] **Session 4 needs no infrastructure.** It runs `temporalio/temporal-proxy` as a container
+      with a throwaway in-process key, so there is no AKS cluster, no Azure Key Vault and no
+      certificates. `proxy-up` runs it, deriving the short namespace name and account that
+      `labs/worker/.env` does not carry.
 
 ### T-minus 1 day
 
@@ -120,7 +168,7 @@ Ordered by how likely they are to bite you.
 | 5 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop |
 | 6 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
 | 7 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
-| 8 | **Session 5 is nearly unverifiable** | SDK metrics and Grafana live on the student's laptop; the portal can only confirm a worker polled and workflows ran | Walk the room and look at screens |
+| 8 | **Session 5 is nearly unverifiable** | SDK metrics and Grafana live in the student's sandbox; the portal can only confirm a worker polled and workflows ran | Walk the room and look at screens |
 | 9 | **temporal-proxy is Pre-release** | "Not ready for production use" per its own front page — fine for teaching, not a shipping recommendation | Say so; the session page does |
 | 10 | **No provenance in the API** | "Created via Terraform" is unverifiable, ever | Session 1 grades the **tag** `provisioner=terraform`, and the checkpoint is named for that rather than for provenance |
 | 11 | **One machine, must stay up** | Stopping it stops every pending 48h revocation and the sweeper | `auto_stop_machines = false`. Don't "optimise" it |
@@ -149,8 +197,8 @@ clean sweep, or revoke by hand in the Cloud UI first.
 | 1. Foundations & Control Plane | 5 / 0 | Namespace quota raised |
 | 2. AuthN/Z, RBAC & Deployment | 8 / 0 | Custom Roles enabled |
 | 3. Worker Config & Versioning | 3 / 0 | Worker Deployments available (public preview) |
-| 4. Data Security & Encryption | 4 / 0 | Nothing — laptop-scale, one Go binary |
-| 5. Observability & Ops | 2 / 1 | Docker images pullable on their laptops |
+| 4. Data Security & Encryption | 4 / 0 | Nothing — sandbox-scale, one Go binary via `proxy-up` |
+| 5. Observability & Ops | 2 / 1 | Nothing — images pre-pulled in the sandbox, started with `obs-up` |
 | 6. Chaos Lab | 3 / 1 | You run drill 3 as a demo |
 
 **Session 1** — the lab is ~5 minutes of Terraform and the rest is the "Use what you built" section.
@@ -179,7 +227,7 @@ This is also the session with the largest checkpoint count (8) and no worker, so
 control plane alone. Project `/instructor` while they work — watching their own service accounts and
 API keys appear is the lesson.
 
-**Session 3** — laptop-scale: two `labs/worker` worker processes against their own namespace is
+**Session 3** — sandbox-scale: two `labs/worker` worker processes against their own namespace is
 enough to create a real Worker Deployment with two versions and shift traffic. Teaches
 **Worker Deployments** (`DeploymentOptions` + `WorkerDeploymentVersion`), not Build ID compatibility
 sets — the latter are deprecated in every SDK and never reached GA. KEDA is your demo.
@@ -200,7 +248,7 @@ don't recommend shipping it. And the second real check is that **no codec server
 server would hand Temporal Cloud the decode path the whole pattern exists to withhold, so a student
 who adds one to make the UI readable fails, correctly.
 
-**Session 5** — SDK metrics into a local Prometheus and Grafana, all on the laptop. The dashboard is
+**Session 5** — SDK metrics into a local Prometheus and Grafana, all in the sandbox. The dashboard is
 provisioned already, so the lab is about reading it rather than building panels.
 
 The trap to pre-empt: .NET's Prometheus exporter defaults produce metric names that match nothing in
@@ -209,7 +257,7 @@ sets the three flags that fix it, and the first "use" step has students `curl` t
 before writing any query. If someone's graph is empty, that is why. Gauges never take `_total`
 regardless — `temporal_num_pollers_total` returns nothing, silently.
 
-**Session 6** — drills 1, 2 and 4 are student-run on a laptop; drill 3 (break the encryption proxy
+**Session 6** — drills 1, 2 and 4 are student-run in the sandbox; drill 3 (break the encryption proxy
 from Session 4) is your demo, and it is the only one producing the "UI cannot decode payload"
 symptom that one of the three runbooks covers. Checkpoints grade the **recovery**, so the grader
 cannot prove they broke anything first — drill 2 passes for someone who never stopped their workers.
@@ -219,8 +267,9 @@ Say that out loud; the page says it too.
 
 ## Related docs
 
-- [PREREQUISITES.md](PREREQUISITES.md) — draft email for attendees, tool list, network
-  requirements, and the three things a bank is most likely to block
+- Instruqt track `temporal-control-plane-workshop` and sandbox preset
+  `temporal-cloud-platform-workshop` — what is installed, the `workshop-*` helper commands,
+  and the egress the sandbox needs. Replaces the old PREREQUISITES.md: attendees install nothing
 - [README.md](README.md) — architecture, sweeper semantics, security posture
 - [DEPLOY.md](DEPLOY.md) — Fly.io deployment, secrets, environment variables
 - [quiz.md](quiz.md) — 18 AhaSlides questions, 3 per session

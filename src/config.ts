@@ -57,6 +57,25 @@ const schema = z.object({
   /** Must match the api-cloud version the vendored descriptor set was built from. */
   CLOUD_OPS_API_VERSION: z.string().default('v0.19.1'),
   CLOUD_OPS_API_KEY: z.string().min(1),
+  /**
+   * Custom role ids attached to every invited student, on top of ROLE_ADMIN.
+   *
+   * Session 2's lab creates a custom role, and custom role administration
+   * defaults to the Account Owner — a Global Admin gets PermissionDenied
+   * without a delegated role. Assigning it here means the invitation carries it
+   * rather than someone running `temporal cloud user set-custom-roles` 25 times
+   * at unpredictable moments. Empty is valid: the account may already delegate
+   * by other means, and an unset id must not block invitations.
+   */
+  STUDENT_CUSTOM_ROLE_IDS: z
+    .string()
+    .default('')
+    .transform((s) =>
+      s
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
 
   // ---- Temporal (where the portal's own workflows run) -----------------
   /**

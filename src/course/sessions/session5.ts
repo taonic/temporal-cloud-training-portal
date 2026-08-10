@@ -7,12 +7,12 @@ import type { SessionDef } from '../types';
  * local Grafana.
  *
  * SDK metrics are emitted by the worker process, not by Temporal Cloud, so this
- * runs entirely on a laptop: `labs/observability` is a docker-compose with
+ * runs entirely inside the student's sandbox: `labs/observability` is a docker-compose with
  * Prometheus and a provisioned Grafana dashboard, scraping the worker's own
  * Prometheus endpoint.
  *
  * That choice has a cost worth being honest about. Everything interesting here
- * happens on the student's machine, where the portal cannot see it. The two
+ * happens inside the student's sandbox, where the portal cannot see it. The two
  * objective checkpoints below are the strongest available — a worker polled the
  * task queue, and workflows completed — and neither proves a dashboard exists.
  * The dashboard and alert catalogue are attested.
@@ -30,9 +30,9 @@ export const session5: SessionDef = {
 
   prerequisites: [
     {
-      name: 'Docker with Compose',
-      why: 'Runs Prometheus and Grafana locally. Nothing is deployed anywhere — the whole stack is on your laptop.',
-      install: 'docker compose version',
+      name: 'Prometheus and Grafana',
+      why: 'Both run as containers in your sandbox — nothing is deployed anywhere. `obs-up` starts the pair, `obs-down` stops them, and the images are already pulled. Watch them in the Grafana and Prometheus tabs above the terminal.',
+      install: 'obs-up',
       docs: 'https://docs.docker.com/get-started/get-docker/',
     },
   ],
@@ -40,13 +40,13 @@ export const session5: SessionDef = {
   note:
     'SDK metrics come from your worker process, not from Temporal Cloud — they are the signals the ' +
     'service cannot see for you: replay failures, slot exhaustion, pollers that quietly went away. ' +
-    'Everything here runs on your laptop, which also means the exit check below can only verify that ' +
-    'a worker ran and workflows completed. The dashboard is your word.',
+    'Everything here runs inside your sandbox, which also means the exit check below can only verify ' +
+    'that a worker ran and workflows completed. The dashboard is your word.',
 
   labSteps: [
-    'Start the local stack: `cd labs/observability && docker compose up -d`. Grafana lands on `http://localhost:3030` (admin/admin) with the Temporal Worker health dashboard already provisioned; Prometheus is on :9090. If you get "address already in use", run `GRAFANA_PORT=3031 docker compose up -d` — see `labs/observability/README.md`.',
+    'Start the stack: `obs-up`. Open the **Grafana** tab (admin/admin) — the Temporal Worker health dashboard is already provisioned. Prometheus has its own tab. Both take a few seconds to come up; reload the tab rather than assuming it failed. See `labs/observability/README.md`.',
     `Run the worker with metrics exposed: \`dotnet run -- worker --metrics-port ${METRICS_PORT}\`.`,
-    'Check Prometheus can see it: `http://localhost:9090` → Status → Targets. The temporal-sdk job should be UP. The second target on 9465 stays DOWN until you run a second worker, which is expected.',
+    'Check Prometheus can see it: the **Prometheus** tab → Status → Targets. The temporal-sdk job should be UP. The second target on 9465 stays DOWN until you run a second worker, which is expected.',
     'Generate traffic: `dotnet run -- load --count 50`. A single workflow gives you a dot; fifty gives you a curve.',
     'Open the Grafana dashboard and answer four questions: what is p99 workflow-task schedule-to-start, what is the sticky cache hit rate, how many task slots stay free, and is anything failing.',
     'Now break something. Kill the worker while load is running and watch schedule-to-start climb and pollers drop to zero. Restart it and watch recovery.',
@@ -153,7 +153,7 @@ export const session5: SessionDef = {
       title: 'A worker polled your task queue',
       detail:
         `At least one poller on ${LAB_TASK_QUEUE}. You cannot emit SDK metrics without a running ` +
-        'worker, so this is the closest the portal can get to verifying the lab from outside your laptop.',
+        'worker, so this is the closest the portal can get to verifying the lab from outside your sandbox.',
     },
     {
       id: 'load-generated',
@@ -166,7 +166,7 @@ export const session5: SessionDef = {
       id: 'session-5-documented',
       title: 'Dashboard and alert catalogue recorded',
       detail:
-        'Looks for a `session-5` namespace tag. Your Grafana runs on your laptop and the portal cannot ' +
+        'Looks for a `session-5` namespace tag. Your Grafana runs in your sandbox and the portal cannot ' +
         'reach it — this records that you built it, and verifies nothing about what is on it.',
       selfAttested: true,
     },

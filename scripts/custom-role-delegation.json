@@ -1,0 +1,13 @@
+{
+  "name": "workshop-customrole-admin",
+  "description": "Lets workshop students create custom roles in the Session 2 lab. Account Owner only by default.",
+  "permissions": [
+    {
+      "actions": ["cloud.customrole.create", "cloud.customrole.list"],
+      "resources": {
+        "resource_type": "account",
+        "allow_all": true
+      }
+    }
+  ]
+}

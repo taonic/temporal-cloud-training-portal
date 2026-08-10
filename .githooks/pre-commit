@@ -1,0 +1,8 @@
+#!/bin/sh
+# Blocks a commit that reintroduces a customer name into shipped files.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Bypass for a commit you are sure about:  git commit --no-verify
+exec pnpm check:names

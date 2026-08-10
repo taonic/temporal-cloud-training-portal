@@ -32,6 +32,17 @@ const CASES: Case[] = [
     },
   },
   {
+    rpc: 'CreateUser',
+    why: 'a dropped custom_roles list fails Session 2 with PermissionDenied, hours later',
+    request: {
+      spec: {
+        email: 'student@example.com',
+        access: { account_access: { role: 'ROLE_ADMIN', custom_roles: ['role-1', 'role-2'] } },
+      },
+      async_operation_id: 'invite-abc',
+    },
+  },
+  {
     rpc: 'DeleteUser',
     why: 'a dropped user_id would revoke nothing',
     request: { user_id: 'u-1', resource_version: 'v1', async_operation_id: 'revoke-abc' },
@@ -130,7 +141,13 @@ const CASES: Case[] = [
 
 /** Every leaf path in an object, as ["a.b.c", value] pairs. */
 function leaves(value: unknown, prefix = ''): Array<[string, unknown]> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+  // Repeated fields index in, so each element is compared as a scalar. Treating
+  // the array itself as a leaf made every repeated field report as lost: the
+  // check below is `!==`, and two arrays holding equal values are never ===.
+  if (Array.isArray(value)) {
+    return value.flatMap((v, i) => leaves(v, prefix ? `${prefix}.${i}` : String(i)));
+  }
+  if (value === null || typeof value !== 'object') {
     return [[prefix, value]];
   }
   return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) =>

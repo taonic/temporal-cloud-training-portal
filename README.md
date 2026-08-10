@@ -78,13 +78,17 @@ fails if any field is lost.
 ### Keeping a customer's name out
 
 This is generic tooling pointed at one customer at a time; their name belongs in `.env.local` and
-`course.md`, not in defaults, fixtures or prose. Nothing enforces that automatically — it is easy
-to reintroduce with one example namespace in a comment, so check it by eye before you hand the
-repo to the next cohort. `course.md` and `quiz.md` are gitignored, and `labs/lab*.tf` are the
-student's own workspace, so a real namespace in any of those is expected.
+`course.md`, not in defaults, fixtures or prose. `pnpm check:names` fails the build if it creeps
+back in — it is easy to reintroduce with one example namespace in a comment. Exemptions live in
+`ALLOW` in `scripts/check-names.ts` and are printed on every run, so nothing is silently excused.
+`course.md` and `quiz.md` are gitignored and `labs/lab*.tf` are the student's own workspace, which
+is why those are exempt.
 
-`pnpm check` runs typecheck and the wire guard. Run it after touching `src/cloud/ops.ts` or
-re-vendoring the protos.
+Per-student values reach the session pages through `SnippetContext`, never as literals — that is
+what keeps a real namespace out of `src/course` while still showing each student their own.
+
+`pnpm check` runs typecheck, the wire guard and the name guard together. `.githooks/pre-commit`
+runs the name guard on commit; enable it with `git config core.hooksPath .githooks`. Run it after touching `src/cloud/ops.ts` or re-vendoring the protos.
 Types owned by this project (`InventoryItem`, everything in `src/temporal` and `src/course`) stay
 camelCase — only proto shapes are snake.
 
@@ -314,7 +318,7 @@ API keys appear on the big screen is the RBAC lesson that Session 2 then formali
   named for what it checks so the page does not overclaim. The Audit Log gets closer than the tag
   does (see below) and Session 1's check could be rebuilt on it; that is not done yet.
 - **Two checkpoints — one each in sessions 5 and 6 — are self-attested**, each because the fact
-  lives on the student's laptop (a Grafana panel, a stopped worker) and nothing reachable can
+  lives in the student's sandbox (a Grafana panel, a stopped worker) and nothing reachable can
   confirm it.
   They are badged and counted separately rather than mixed into the verified total.
 - Nothing prevents a student deleting another student; the sweeper and the invitation workflows

@@ -85,25 +85,39 @@ export function Code({ children, lang }: { children: string; lang?: SnippetLang 
 }
 
 /**
- * Renders `backtick` spans as inline code. Deliberately not a markdown parser —
- * session copy needs exactly one thing, which is for commands and file paths to
- * stop hiding inside prose.
+ * Renders `backtick` spans as inline code and **double-asterisk** spans as bold.
+ * Deliberately not a markdown parser — session copy needs exactly two things:
+ * commands and file paths that stop hiding inside prose, and the one clause per
+ * step that a student must not skim past.
+ *
+ * Bold is here because the copy was already written for it. Every session file
+ * used `**…**` and got literal asterisks on the page, which is the failure mode
+ * of supporting half a syntax: the author cannot tell from the source that it
+ * did not work.
  */
 export function RichText({ children }: { children: string }) {
   return (
     <>
-      {children.split(/(`[^`]+`)/g).map((part, i) =>
-        part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
-          <code
-            key={i}
-            className="rounded border border-line-subtle/40 bg-surface-primary/60 px-1.5 py-0.5 font-mono text-[0.88em] text-brand-soft"
-          >
-            {part.slice(1, -1)}
-          </code>
-        ) : (
-          part
-        ),
-      )}
+      {children.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, i) => {
+        if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+          return (
+            <code
+              key={i}
+              className="rounded border border-line-subtle/40 bg-surface-primary/60 px-1.5 py-0.5 font-mono text-[0.88em] text-brand-soft"
+            >
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+          return (
+            <strong key={i} className="font-semibold text-content-primary">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        return part;
+      })}
     </>
   );
 }

@@ -29,8 +29,8 @@ export const session4: SessionDef = {
   prerequisites: [
     {
       name: 'temporal-proxy',
-      why: 'The encrypting gateway this whole session is about.',
-      install: 'docker pull temporalio/temporal-proxy:latest',
+      why: 'The encrypting gateway this whole session is about. The image is already pulled in your sandbox; `proxy-up` runs it in the foreground on 127.0.0.1:7233 with the command from `labs/proxy/README.md`.',
+      install: 'proxy-up',
       docs: 'https://github.com/temporalio/temporal-proxy',
     },
   ],
@@ -42,8 +42,7 @@ export const session4: SessionDef = {
     'and that substitution is the real deliverable of this session.',
 
   labSteps: [
-    'Pull the proxy image: `docker pull temporalio/temporal-proxy:latest` — see `labs/proxy/README.md`.',
-    'In a fresh terminal export the SHORT namespace name, the account and your API key, then run the proxy container against `labs/proxy/config.yaml`. It listens on 127.0.0.1:7233.',
+    'In a fresh terminal, run `proxy-up`. It listens on 127.0.0.1:7233, against `labs/proxy/config.yaml`. Read what it prints: the proxy wants the SHORT namespace name plus the account, which is exactly what `labs/worker/.env` does not hold — `proxy-up` derives both, and `labs/proxy/README.md` has the full `docker run` if you would rather type it.',
     'Point the worker at it: `dotnet run -- worker --proxy` in one terminal, `dotnet run -- start --proxy` in another. Note what the worker no longer has — no endpoint, no TLS, no API key.',
     'Open that workflow in the Cloud UI. The input is readable JSON. Temporal Cloud can see your data, because nothing has encrypted it yet.',
     'Uncomment the `encryption:` block at the bottom of `labs/proxy/config.yaml`, restart the proxy, and run `dotnet run -- start --proxy` again.',

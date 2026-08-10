@@ -45,13 +45,24 @@ export async function inviteGlobalAdmin(args: {
     const existing = await findUserByEmail(args.email);
     if (existing) {
       log.info('Adopting existing Cloud user', { email: args.email, userId: existing.id });
+      // Adoption skips CreateUser, so it also skips STUDENT_CUSTOM_ROLE_IDS.
+      // Say so: a student who was invited by hand and then adopted here will
+      // fail Session 2 with PermissionDenied, and that is very hard to guess at.
+      if (config().STUDENT_CUSTOM_ROLE_IDS.length) {
+        log.warn('Adopted user did not receive the configured custom roles', {
+          email: args.email,
+          fix: 'temporal cloud user set-custom-roles --user-email <email> --custom-role <id>',
+        });
+      }
       return { userId: existing.id, preexisting: true };
     }
 
+    const customRoleIds = config().STUDENT_CUSTOM_ROLE_IDS;
     const { userId } = await createUser({
       email: args.email,
       role: 'ROLE_ADMIN',
       asyncOperationId: args.asyncOperationId,
+      customRoleIds,
     });
 
     if (!userId) {

@@ -14,9 +14,10 @@
     "build": "next build",
     "start": "tsx src/server.ts",
     "worker": "tsx src/temporal/worker.ts",
-    "check": "pnpm typecheck && pnpm check:wire",
+    "check": "pnpm typecheck && pnpm check:wire && pnpm check:names",
     "typecheck": "tsc --noEmit",
     "check:wire": "tsx scripts/check-wire.ts",
+    "check:names": "tsx scripts/check-names.ts",
     "proto:vendor": "node scripts/vendor-protos.mjs",
     "ops:preflight": "tsx scripts/preflight.ts"
   },
