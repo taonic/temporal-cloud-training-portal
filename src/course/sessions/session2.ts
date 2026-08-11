@@ -97,12 +97,13 @@ export const session2: SessionDef = {
     'Give it `write` on your namespace. This is the grant that actually matters: `write` is what lets a Worker poll task queues and complete tasks.',
     'Issue an API key owned by the service account, not by you. A key owned by a person dies with the person.',
     'Create a group for your on-call operators, and a separate access block granting it namespace permission. The group is the identity; the access block is the entitlement. Membership stays empty — that half comes from your IdP over SCIM.',
-    'Put the configuration below into `labs/lab2.tf` — a new file alongside `lab1.tf`, not a replacement for it. Then run `terraform plan` and read it before applying.',
+    'Put the configuration below into `labs/lab2.tf` — a new file alongside `lab1.tf`, not a replacement for it. Two of its resources carry `provider = temporalcloud.elevated`: creating a custom role, and attaching one to a principal, are Account Owner permissions that your Global Admin does not have. A shared service account holds that delegation, and its key is already in your sandbox — you do not need to fetch or paste anything. Read `labs/providers.tf` for why the workshop hands you a second identity rather than a bigger one.',
+    'Run `terraform plan` and read it before applying. Everything except those two resources still runs as you.',
     'Run `terraform apply`, then hit Re-check. Work through "Use what you built" at the foot of the page afterwards — that is where the lesson actually lands.',
   ],
 
   snippetLang: 'hcl',
-  snippet: ({ serviceAccountName, groupName, customRoleName, namespaceId }) => `# Goes in labs/lab2.tf.
+  snippet: ({ serviceAccountName, customRoleName, namespaceId }) => `# Goes in labs/lab2.tf.
 #
 # The terraform block, provider and API-key variable already live in labs/ —
 # versions.tf and providers.tf. Declaring them again here is a
@@ -111,6 +112,13 @@ export const session2: SessionDef = {
 # It references temporalcloud_namespace.lab from lab1.tf. Terraform reads every
 # .tf file in the directory as one module, so that works — as long as lab1.tf is
 # still there. Do not move Session 1's resources into this file.
+#
+# Two resources below carry "provider = temporalcloud.elevated". That is not
+# decoration. Creating a custom role, and attaching one to a principal, are
+# Account Owner permissions — your Global Admin cannot do either. A shared
+# service account holds that delegation and those two resources run as it;
+# everything else in labs/ still runs as you. See providers.tf for why the
+# workshop does not simply grant you the permission instead.
 
 # The control-plane access a Worker needs, which is very nearly none.
 # A Worker polls a task queue and completes tasks; it never calls the Cloud Ops
@@ -118,6 +126,9 @@ export const session2: SessionDef = {
 # No allow_all, and no account-scoped grant — a Worker does not enumerate the
 # account it runs in.
 resource "temporalcloud_custom_role" "worker" {
+  # Creating a custom role is an Account Owner permission.
+  provider = temporalcloud.elevated
+
   name        = "${customRoleName}"
   description = "Read one namespace. Nothing else."
 
@@ -134,6 +145,12 @@ resource "temporalcloud_custom_role" "worker" {
 }
 
 resource "temporalcloud_service_account" "worker" {
+  # Elevated too, and this one surprises people: account_access_custom_roles
+  # below is cloud.customrole.ASSIGN, which is the same restricted permission
+  # as creating the role. Leave this line off and the apply fails one
+  # resource later than you expect.
+  provider = temporalcloud.elevated
+
   name = "${serviceAccountName}"
 
   # The FLOOR, not "developer". Every principal must carry a predefined role,

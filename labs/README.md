@@ -34,6 +34,18 @@ cross terminals. There is deliberately no `terraform.tfvars`: the provider reads
 `TEMPORAL_CLOUD_API_KEY` directly, so the key never needs to exist in a file in
 this repo.
 
+There is a third variable, and you do not set it:
+
+```bash
+TF_VAR_elevated_api_key=<shared service account>   # already exported in the sandbox
+```
+
+Lab 2 creates a Custom Role, which is an Account Owner permission — Global Admin
+cannot, and granting a student that permission strips their data-plane access,
+so the Worker in every other lab would stop working. A shared service account
+holds the delegation instead, and exactly two resources in `lab2.tf` name the
+aliased provider that uses it. Everything else you build runs as you.
+
 ## Per lab
 
 | File | What you write in it |

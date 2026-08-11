@@ -1,11 +1,26 @@
 {
   "name": "workshop-customrole-admin",
-  "description": "Lets workshop students create custom roles in the Session 2 lab. Account Owner only by default.",
+  "description": "Lets the workshop-terraform service account run Session 2's custom role resources.",
   "permissions": [
     {
-      "actions": ["cloud.customrole.create", "cloud.customrole.list"],
+      "actions": [
+        "cloud.customrole.assign",
+        "cloud.customrole.create",
+        "cloud.customrole.list"
+      ],
       "resources": {
-        "resource_type": "account",
+        "resource_type": "accounts",
+        "allow_all": true
+      }
+    },
+    {
+      "actions": [
+        "cloud.customrole.delete",
+        "cloud.customrole.get",
+        "cloud.customrole.update"
+      ],
+      "resources": {
+        "resource_type": "custom-roles",
         "allow_all": true
       }
     }
