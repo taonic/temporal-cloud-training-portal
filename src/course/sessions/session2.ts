@@ -12,25 +12,42 @@ import type { SessionDef } from '../types';
  * namespace permission, and its control-plane access should be as close to
  * nothing as the product allows.
  *
- * Two facts from the docs drive the whole design, and both are counter-intuitive
- * enough that the lab makes students observe them rather than take our word:
+ * The lab builds a NAMESPACE-SCOPED service account: `namespace_scoped_access`
+ * with `write`, and no account-wide access block at all. That is Temporal's own
+ * documented recommendation for Worker API keys, and it is the least-privilege
+ * shape the product actually offers.
  *
- *  1. Custom Roles are ADDITIVE. They cannot narrow or remove what a predefined
- *     role grants; effective access is the union. So `developer` plus a narrow
- *     custom role still grants everything `developer` does.
- *  2. Every principal must have a predefined role, and the floor is `read` —
- *     which already includes GetUsers, GetNamespaces and ListNamespaces across
- *     the whole account. The floor is wider than a Worker needs and no custom
- *     role can bring it down.
+ * It used to build an account-scoped service account plus a hand-written custom
+ * role, and that cost far more than it taught:
  *
- * That second fact is why the section below has students run `temporal cloud
- * user list` and watch it SUCCEED. A least-privilege lab that fakes a denial
- * teaches a control that isn't there. The one account-level thing `read`
- * genuinely cannot do is read the Audit Log — GetAuditLogs is Global Admin and
- * Account Owner only — so that is the denial the lab is built around.
+ *  - Creating a custom role and attaching one are Account Owner permissions, so
+ *    students needed a second, elevated credential threaded through an aliased
+ *    provider — a workshop-shaped workaround, not a pattern anyone would copy.
+ *  - Custom Roles are Pre-release, capped at 25 per account, and carry a
+ *    confirmed bug where an account-level custom role costs the principal its
+ *    data-plane access.
+ *  - The role itself granted one action a Worker never calls.
+ *
+ * The two facts that made the old lab worth doing survive without it, because
+ * they are properties of the model rather than of custom roles:
+ *
+ *  1. A namespace-scoped service account still carries an implicit `Read`
+ *     account role — the docs are explicit — and `read` already includes
+ *     GetUsers, GetNamespaces and ListNamespaces across the whole account. There
+ *     is no knob that lowers it, which is exactly why the lab has students
+ *     observe it instead of assuming.
+ *  2. The precision the product does offer is at the namespace, not the account:
+ *     one namespace, one permission, immutable after creation.
+ *
+ * That is why the section below has students run `temporal cloud user list` and
+ * watch it SUCCEED. A least-privilege lab that fakes a denial teaches a control
+ * that isn't there. The one account-level thing the floor genuinely cannot do is
+ * read the Audit Log — GetAuditLogs is Global Admin and Account Owner only — so
+ * that is the denial the lab is built around.
  */
+const REQUIRED_PERMISSION = 'PERMISSION_WRITE';
+/** Anything at or above these on the account makes the namespace grant irrelevant. */
 const OVER_PRIVILEGED = new Set(['ROLE_OWNER', 'ROLE_ADMIN', 'ROLE_DEVELOPER']);
-const REQUIRED_ACTION = 'cloud.namespace.get';
 
 export const session2: SessionDef = {
   number: 2,
@@ -45,12 +62,45 @@ export const session2: SessionDef = {
 
   note:
     'You are holding Global Admin right now. This lab builds the identity your **Workers** should run ' +
-    'as instead. A Worker needs `write` on one namespace and essentially nothing on the account, so ' +
-    'start at `read` — the floor — and add only what is genuinely missing. Custom Roles are additive: ' +
-    'they can only grant, never revoke, so reaching for `developer` fails the check deliberately. ' +
-    'Find out in "Use what you built" how wide that floor really is.',
+    'as instead: a **namespace-scoped** service account with `write` on one namespace and no ' +
+    'account-wide access block at all. That is what Temporal recommends for Worker API keys, and it ' +
+    'needs no custom role — every resource in this lab runs as you. Then find out in "Use what you ' +
+    'built" how much account access it still has anyway, because the answer is not none.',
 
   references: [
+    {
+      source: 'Access control',
+      links: [
+        {
+          label: 'Namespace-scoped Service Accounts',
+          url: 'https://docs.temporal.io/cloud/manage-access/service-accounts#scoped',
+          note:
+            'Read the constraints: always a `Read` account role, exactly one namespace permission, ' +
+            'and the namespace cannot be changed afterwards. Deleting the namespace deletes these ' +
+            'service accounts and their keys with it.',
+        },
+        {
+          label: 'temporalcloud_service_account',
+          url: 'https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/service_account',
+          note:
+            '`namespace_scoped_access` cannot be combined with `account_access`, ' +
+            '`account_access_custom_roles` or `namespace_accesses` — the provider rejects it at ' +
+            '`validate` time, before it talks to the API.',
+        },
+        {
+          label: 'Cloud RBAC roles and permissions',
+          url: 'https://docs.temporal.io/cloud/manage-access/roles-and-permissions',
+          note: 'What each account role already grants, and the three namespace permissions.',
+        },
+        {
+          label: 'Permissions reference',
+          url: 'https://docs.temporal.io/cloud/manage-access/permissions-reference',
+          note:
+            'The per-endpoint table. Worth reading once for `Read-Only`: it is the floor every ' +
+            'principal sits on, and it is wider than the name suggests.',
+        },
+      ],
+    },
     {
       source: 'Audit Logs',
       links: [
@@ -60,7 +110,7 @@ export const session2: SessionDef = {
           note:
             'Who/when/what for the control plane, retained 30 days over the API. Note the documented ' +
             'event list is not exactly what the API emits — the wire says `CreateApiKey`, the page ' +
-            'says `CreateAPIKey`, and `CreateCustomRole` is not listed at all.',
+            'says `CreateAPIKey`.',
         },
         {
           label: 'temporal cloud account audit-log',
@@ -74,36 +124,21 @@ export const session2: SessionDef = {
         },
       ],
     },
-    {
-      source: 'Access control',
-      links: [
-        {
-          label: 'temporalcloud_custom_role',
-          url: 'https://registry.terraform.io/providers/temporalio/temporalcloud/latest/docs/resources/custom_role',
-          note: 'Note `resource_ids` is required on every permission block even when `allow_all` is true.',
-        },
-        {
-          label: 'Cloud RBAC roles and permissions',
-          url: 'https://docs.temporal.io/cloud/users',
-          note: 'What each predefined role already grants — which is what a custom role can only add to.',
-        },
-      ],
-    },
   ],
 
   labSteps: [
-    'Create a custom role granting only what the Worker genuinely needs on the control plane: read ITS OWN namespace, by id. Not `allow_all`, and no account-wide grant — a Worker never enumerates the account.',
-    'Create the service account with the predefined role `read` — the floor, because every principal must have one — and assign the custom role on top.',
-    'Give it `write` on your namespace. This is the grant that actually matters: `write` is what lets a Worker poll task queues and complete tasks.',
-    'Issue an API key owned by the service account, not by you. A key owned by a person dies with the person.',
+    'Create the Worker\'s service account as **namespace-scoped**: `namespace_scoped_access` naming your namespace, with permission `write`. `write` is the grant that actually matters — it is what lets a Worker poll task queues and complete Workflow and Activity Tasks.',
+    'Do not give it `account_access`, `account_access_custom_roles` or `namespace_accesses`. The provider rejects those alongside `namespace_scoped_access`, and `terraform validate` says so before any API call. A namespace-scoped service account is the one identity shape in the product that has no account-wide access block of its own.',
+    'Note what you are NOT building: a custom role. It would be Account Owner permissions to create, Pre-release, capped at 25 per account, and additive — a custom role can only ever grant more, never less. There is nothing here for one to add.',
+    'Issue an API key owned by the service account, not by you. A key owned by a person dies with the person — and this one is what goes into the Worker\'s environment as `TEMPORAL_API_KEY`.',
     'Create a group for your on-call operators, and a separate access block granting it namespace permission. The group is the identity; the access block is the entitlement. Membership stays empty — that half comes from your IdP over SCIM.',
-    'Put the configuration below into `labs/lab2.tf` — a new file alongside `lab1.tf`, not a replacement for it. Two of its resources carry `provider = temporalcloud.elevated`: creating a custom role, and attaching one to a principal, are Account Owner permissions that your Global Admin does not have. A shared service account holds that delegation, and its key is already in your sandbox — you do not need to fetch or paste anything. Read `labs/providers.tf` for why the workshop hands you a second identity rather than a bigger one.',
-    'Run `terraform plan` and read it before applying. Everything except those two resources still runs as you.',
+    'Put the configuration below into `labs/lab2.tf` — a new file alongside `lab1.tf`, not a replacement for it. Every resource in it runs as you: Global Admin can create service accounts, groups and keys, so there is no second credential and no aliased provider anywhere in this lab.',
+    'Run `terraform plan` and read it before applying.',
     'Run `terraform apply`, then hit Re-check. Work through "Use what you built" at the foot of the page afterwards — that is where the lesson actually lands.',
   ],
 
   snippetLang: 'hcl',
-  snippet: ({ serviceAccountName, customRoleName, namespaceId }) => `# Goes in labs/lab2.tf.
+  snippet: ({ serviceAccountName, groupName, namespaceId }) => `# Goes in labs/lab2.tf.
 #
 # The terraform block, provider and API-key variable already live in labs/ —
 # versions.tf and providers.tf. Declaring them again here is a
@@ -113,62 +148,38 @@ export const session2: SessionDef = {
 # .tf file in the directory as one module, so that works — as long as lab1.tf is
 # still there. Do not move Session 1's resources into this file.
 #
-# Two resources below carry "provider = temporalcloud.elevated". That is not
-# decoration. Creating a custom role, and attaching one to a principal, are
-# Account Owner permissions — your Global Admin cannot do either. A shared
-# service account holds that delegation and those two resources run as it;
-# everything else in labs/ still runs as you. See providers.tf for why the
-# workshop does not simply grant you the permission instead.
+# Everything below runs as YOU. Global Admin can create service accounts,
+# groups and API keys, so this lab needs no second credential.
 
-# The control-plane access a Worker needs, which is very nearly none.
-# A Worker polls a task queue and completes tasks; it never calls the Cloud Ops
-# API to do its job. So this grants ONE action, on ONE namespace, by id.
-# No allow_all, and no account-scoped grant — a Worker does not enumerate the
-# account it runs in.
-resource "temporalcloud_custom_role" "worker" {
-  # Creating a custom role is an Account Owner permission.
-  provider = temporalcloud.elevated
-
-  name        = "${customRoleName}"
-  description = "Read one namespace. Nothing else."
-
-  permissions = [
-    {
-      actions = ["cloud.namespace.get"]
-      resources = {
-        resource_type = "namespaces"
-        resource_ids  = ["${namespaceId}"]
-        allow_all     = false
-      }
-    },
-  ]
-}
-
+# The identity your Worker runs as.
+#
+# NAMESPACE-SCOPED: one namespace, one permission, and no account-wide access
+# block at all. This is Temporal's documented recommendation for a Worker's API
+# key, and it is as close to nothing as the product goes.
+#
+# "write" is the grant that does the work: it permits polling task queues and
+# completing Workflow and Activity Tasks. It is scoped to this namespace and
+# nowhere else.
 resource "temporalcloud_service_account" "worker" {
-  # Elevated too, and this one surprises people: account_access_custom_roles
-  # below is cloud.customrole.ASSIGN, which is the same restricted permission
-  # as creating the role. Leave this line off and the apply fails one
-  # resource later than you expect.
-  provider = temporalcloud.elevated
+  name        = "${serviceAccountName}"
+  description = "Worker identity for ${namespaceId}. Namespace-scoped."
 
-  name = "${serviceAccountName}"
+  namespace_scoped_access = {
+    namespace_id = temporalcloud_namespace.lab.id
+    permission   = "write"
+  }
 
-  # The FLOOR, not "developer". Every principal must carry a predefined role,
-  # and custom roles cannot take permissions away — so whatever you pick here is
-  # the minimum this identity will ever have. Read what "read" really covers in
-  # the section below before you assume it is tight.
-  account_access              = "read"
-  account_access_custom_roles = [temporalcloud_custom_role.worker.id]
-
-  # The grant that actually matters. "write" is the namespace permission that
-  # lets a Worker poll task queues and complete Workflow and Activity Tasks —
-  # and it is scoped per namespace, entirely separately from the account role.
-  namespace_accesses = [
-    {
-      namespace_id = temporalcloud_namespace.lab.id
-      permission   = "write"
-    }
-  ]
+  # Deliberately absent: account_access, account_access_custom_roles and
+  # namespace_accesses. The provider rejects any of them alongside
+  # namespace_scoped_access — try adding account_access = "read" and run
+  # terraform validate to watch it refuse. No custom role either: creating one
+  # is an Account Owner permission, and custom roles are ADDITIVE, so a role
+  # could only ever grant this identity more than it has.
+  #
+  # Two constraints worth knowing before you build on this shape:
+  #   · the namespace is IMMUTABLE — changing it replaces the service account
+  #   · the account role is implicitly "read". You cannot set it to none, and
+  #     read is wider than it sounds. You will see exactly how wide below.
 }
 
 # Owned by the service account, so it outlives any individual. This is the key
@@ -179,6 +190,29 @@ resource "temporalcloud_apikey" "worker" {
   owner_id     = temporalcloud_service_account.worker.id
   expiry_time  = "2026-12-31T00:00:00Z"
   disabled     = false
+}
+
+# Your on-call operators. Two resources, because identity and entitlement are
+# two decisions with two owners: temporalcloud_group creates the group and
+# entitles nobody, and the access block below is what grants it anything.
+resource "temporalcloud_group" "operators" {
+  name = "${groupName}"
+}
+
+resource "temporalcloud_group_access" "operators" {
+  id             = temporalcloud_group.operators.id
+  account_access = "read"
+
+  namespace_accesses = [
+    {
+      namespace_id = temporalcloud_namespace.lab.id
+      permission   = "write"
+    }
+  ]
+
+  # No membership here on purpose. Who is in this group arrives from your IdP
+  # over SCIM — which is why removing someone in Azure AD removes their
+  # Temporal access without anyone touching Terraform.
 }
 
 # The "Use what you built" section needs this key. Terraform will not print a
@@ -254,19 +288,21 @@ output "worker_api_key" {
         expect:
           'Succeeds — and this is the only permission a Worker genuinely needs. `write` on the namespace ' +
           'is what lets it poll task queues and complete tasks, and it is granted per namespace, ' +
-          'entirely separately from the account role.',
+          'entirely separately from any account role.',
       },
       {
         label: 'As the Worker: find the floor — the two things it should not be able to do',
         command:
           'temporal cloud user list --api-key $WORKER_API_KEY\ntemporal cloud namespace list --api-key $WORKER_API_KEY',
         expect:
-          '**Both succeed, and that is the lesson.** The predefined `read` role already grants GetUsers ' +
-          'and ListNamespaces across the whole account, and every principal must carry a predefined ' +
-          'role. Custom Roles are additive, so nothing you wrote could take those away. The identity ' +
-          'your Worker runs as can enumerate every colleague and every namespace in the account — ' +
-          'not because you granted it, but because `read` is the floor and the floor is not that low. ' +
-          'Check it yourself in the account-level role table (linked below) before you design around it.',
+          '**Both succeed, and that is the lesson.** You wrote no account access at all, and this ' +
+          'identity still has some: a namespace-scoped service account always carries an implicit ' +
+          '`Read` account role, and `Read` already includes GetUsers, GetNamespaces and ListNamespaces ' +
+          'across the whole account. There is no argument that lowers it — not `none`, not a custom ' +
+          'role, which could only add. The identity your Worker runs as can enumerate every colleague ' +
+          'and every namespace in the account, not because you granted it, but because that is the ' +
+          'floor. Check it yourself in the permissions reference (linked below) before you design ' +
+          'around where you assume the floor sits.',
       },
       {
         label: 'The one account-level thing the floor really does deny',
@@ -280,6 +316,15 @@ output "worker_api_key" {
           'is what makes the Audit Log worth anything.',
       },
       {
+        label: 'As the Worker: try to reach a namespace it was not scoped to',
+        command: `temporal workflow list \\\n  --address ${namespaceId}.tmprl.cloud:7233 \\\n  --namespace <a colleague's namespace> \\\n  --api-key $WORKER_API_KEY`,
+        expect:
+          'PERMISSION_DENIED. Pick any namespace from the `namespace list` two steps up — it can *see* ' +
+          'them all through the account floor, and it can act in exactly one. That gap between what an ' +
+          'identity can enumerate and what it can touch is the whole reason namespace permissions ' +
+          'exist separately from account roles, and it is what your own Worker key buys you.',
+      },
+      {
         label: 'Hand the Worker its own credential',
         command: `cat > worker/.env <<EOF\nTEMPORAL_ADDRESS=${namespaceId}.tmprl.cloud:7233\nTEMPORAL_NAMESPACE=${namespaceId}\nTEMPORAL_API_KEY=$(terraform output -raw worker_api_key)\nEOF\n\ncd worker && dotnet run -- worker`,
         expect:
@@ -290,47 +335,42 @@ output "worker_api_key" {
           'here worth treating like a secret.',
       },
     ],
-    }),
+  }),
 
   checkpoints: [
-    {
-      id: 'custom-role-exists',
-      title: 'Custom role exists',
-      detail: 'A custom role with your assigned name is present in the account.',
-    },
-    {
-      id: 'custom-role-scoped',
-      title: 'Custom role is scoped to one namespace, and nothing wider',
-      detail:
-        `Grants ${REQUIRED_ACTION} against your namespace id specifically, and carries no ` +
-        '`allow_all` permission at all. A Worker reads the namespace it runs in; it has no business ' +
-        'enumerating the account, and a role that grants everything to everything is a predefined ' +
-        'role with extra steps.',
-    },
     {
       id: 'service-account-exists',
       title: 'Worker service account exists',
       detail: 'A service account with your assigned name is present and active.',
     },
     {
-      id: 'service-account-least-privilege',
-      title: 'Built from the floor up',
+      id: 'service-account-namespace-scoped',
+      title: 'Namespace-scoped — no account-wide access block',
       detail:
-        'The predefined role must be `read` (or lower) and the custom role must be attached. Custom ' +
-        'roles are additive, so a `developer` base means the custom role narrows nothing.',
+        'The service account carries `namespace_scoped_access` rather than `account_access`. This is ' +
+        'the least-privilege identity shape the product offers: no account role of its own to grant, ' +
+        'no custom role to attach, and nothing account-wide to get wrong later.',
     },
     {
-      id: 'service-account-namespace-scoped',
-      title: 'Namespace access granted explicitly',
+      id: 'service-account-write-on-namespace',
+      title: 'Scoped to your namespace with `write`',
       detail:
-        'The service account holds an explicit permission on your namespace, separate from its account ' +
-        'role. This is the grant a Worker actually runs on — `write` is what permits polling task ' +
-        'queues and completing tasks.',
+        'The single namespace permission targets your namespace and is `write` — the grant that lets ' +
+        'a Worker poll task queues and complete Workflow and Activity Tasks. `read` cannot do the job; ' +
+        '`admin` lets the Worker reconfigure the namespace it runs in.',
     },
     {
       id: 'service-account-api-key',
       title: 'API key owned by the service account',
       detail: 'At least one API key whose owner is the service account, not a person.',
+    },
+    {
+      id: 'operators-group-entitled',
+      title: 'Operators group holds `write`, and holds no members',
+      detail:
+        'The group exists and its access block grants `write` on your namespace. Membership is ' +
+        'deliberately empty: Terraform declares what a group may do, and your IdP decides who is in ' +
+        'it over SCIM. A group with an entitlement and no members is the correct end state here.',
     },
   ],
 
@@ -340,47 +380,16 @@ output "worker_api_key" {
       return ctx.blockedAll(`No namespace named "${ctx.namespaceName}" — complete Session 1 first.`);
     }
 
-    const [serviceAccounts, apiKeys, customRoles] = await Promise.all([
+    const [serviceAccounts, apiKeys, userGroups] = await Promise.all([
       ctx.serviceAccounts(),
       ctx.apiKeys(),
-      ctx.customRoles(),
+      ctx.userGroups(),
     ]);
 
-    // Namespace access maps are keyed by namespace id (`name.account`), but be
-    // lenient and match the bare name too.
+    // Namespace access is keyed by namespace id (`name.account`), but be lenient
+    // and match the bare name too.
     const matchesNamespace = (key: string) =>
       key === ns.namespace || key === ctx.namespaceName || key.startsWith(`${ctx.namespaceName}.`);
-
-    /* -- Custom role ---------------------------------------------------- */
-    const role = customRoles.find((r) => r.spec?.name === ctx.customRoleName);
-    const scopedGrant = role?.spec?.permissions?.find(
-      (p) =>
-        (p.actions ?? []).includes(REQUIRED_ACTION) &&
-        !p.resources?.allow_all &&
-        (p.resources?.resource_ids ?? []).some(matchesNamespace),
-    );
-    // A Worker has no reason to enumerate the account, so one allow_all
-    // anywhere in the role fails it — including the account-scoped
-    // cloud.namespace.list grant this lab used to hand out by default.
-    const wideGrant = (role?.spec?.permissions ?? []).find((p) => p.resources?.allow_all);
-
-    const roleResults = role
-      ? [
-          ctx.mk('custom-role-exists', 'pass', `Found "${role.spec?.name}" (${role.state}).`),
-          ctx.check(
-            'custom-role-scoped',
-            scopedGrant !== undefined && wideGrant === undefined,
-            `Grants ${REQUIRED_ACTION} on ${scopedGrant?.resources?.resource_ids?.join(', ')}, and nothing account-wide.`,
-            wideGrant
-              ? `Grants ${wideGrant.actions?.join(', ')} with allow_all on ${wideGrant.resources?.resource_type}. ` +
-                'Drop it — a Worker reads its own namespace by id and never enumerates the account.'
-              : `No permission granting ${REQUIRED_ACTION} scoped to your namespace id.`,
-          ),
-        ]
-      : [
-          ctx.mk('custom-role-exists', 'fail', `No custom role named "${ctx.customRoleName}".`),
-          ctx.mk('custom-role-scoped', 'blocked', 'Waiting on the custom role.'),
-        ];
 
     /* -- Service account ------------------------------------------------ */
     const sa = serviceAccounts.find((s) => s.spec?.name === ctx.serviceAccountName);
@@ -388,37 +397,56 @@ output "worker_api_key" {
     const saResults = !sa
       ? [
           ctx.mk('service-account-exists', 'fail', `No service account named "${ctx.serviceAccountName}".`),
-          ctx.mk('service-account-least-privilege', 'blocked', 'Waiting on the service account.'),
           ctx.mk('service-account-namespace-scoped', 'blocked', 'Waiting on the service account.'),
+          ctx.mk('service-account-write-on-namespace', 'blocked', 'Waiting on the service account.'),
           ctx.mk('service-account-api-key', 'blocked', 'Waiting on the service account.'),
         ]
       : (() => {
+          const scoped = sa.spec?.namespace_scoped_access;
           const accountRole = accountRoleOf(sa);
-          const attachedRoles = sa.spec?.access?.account_access?.custom_roles ?? [];
-          const hasCustomRole = role ? attachedRoles.includes(role.id) : attachedRoles.length > 0;
-          const overPrivileged = accountRole !== undefined && OVER_PRIVILEGED.has(accountRole);
+          // An account-scoped service account keeps its grants in a map instead.
+          const fromAccountScoped = Object.entries(
+            protoMap(sa.spec?.access?.namespace_accesses),
+          ).find(([key]) => matchesNamespace(key));
 
-          const nsAccesses = protoMap(sa.spec?.access?.namespace_accesses);
-          const scoped = Object.entries(nsAccesses).find(([key]) => matchesNamespace(key));
+          const scopedNamespace = scoped?.namespace;
+          const permission = scoped
+            ? scoped.access?.permission
+            : fromAccountScoped?.[1]?.permission;
           const owned = apiKeys.filter((k) => k.spec?.owner_id === sa.id);
 
           return [
             ctx.mk('service-account-exists', 'pass', `Found ${sa.spec?.name} (${sa.state}).`),
             ctx.check(
-              'service-account-least-privilege',
-              !overPrivileged && hasCustomRole,
-              `Predefined role ${accountRole} with the custom role attached — built from the floor up.`,
-              overPrivileged
-                ? `Predefined role is ${accountRole}. Custom roles are additive, so this grants everything ` +
-                  `${accountRole} grants regardless of how narrow your custom role is. Start at read.`
-                : `Predefined role is ${accountRole}, but no custom role is attached — this identity ` +
-                  'cannot do its job. Attach the custom role rather than raising the predefined one.',
-            ),
-            ctx.check(
               'service-account-namespace-scoped',
               scoped !== undefined,
-              `Holds ${scoped?.[1]?.permission} on ${scoped?.[0]}.`,
-              'No explicit permission on your namespace.',
+              `Namespace-scoped to ${scopedNamespace} — no account-wide access block.`,
+              accountRole && OVER_PRIVILEGED.has(accountRole)
+                ? `Account-scoped with the predefined role ${accountRole}, which carries every ` +
+                  'namespace in the account. Replace account_access with namespace_scoped_access.'
+                : accountRole
+                  ? `Account-scoped with the predefined role ${accountRole}. Use ` +
+                    'namespace_scoped_access instead — it is the one shape with no account-wide ' +
+                    'grant of its own, and the provider will not let you write both.'
+                  : 'No namespace_scoped_access block on the service account.',
+            ),
+            ctx.check(
+              'service-account-write-on-namespace',
+              scopedNamespace !== undefined &&
+                matchesNamespace(scopedNamespace) &&
+                permission === REQUIRED_PERMISSION,
+              `Holds ${permission} on ${scopedNamespace}.`,
+              scopedNamespace === undefined
+                ? fromAccountScoped
+                  ? `Holds ${permission} on ${fromAccountScoped[0]}, but through namespace_accesses ` +
+                    'alongside an account role. Move the grant into namespace_scoped_access — the ' +
+                    'provider will not accept both.'
+                  : 'No permission on your namespace at all.'
+                : !matchesNamespace(scopedNamespace)
+                  ? `Scoped to ${scopedNamespace}, not ${ns.namespace}. The namespace is immutable — ` +
+                    'this one has to be destroyed and recreated.'
+                  : `Permission is ${permission}, expected ${REQUIRED_PERMISSION}. ` +
+                    'read cannot poll a task queue; admin can reconfigure the namespace.',
             ),
             ctx.check(
               'service-account-api-key',
@@ -429,6 +457,26 @@ output "worker_api_key" {
           ];
         })();
 
-    return [...roleResults, ...saResults];
+    /* -- Operators group ------------------------------------------------ */
+    const group = userGroups.find((g) => g.spec?.display_name === ctx.groupName);
+    const groupGrant = group
+      ? Object.entries(protoMap(group.spec?.access?.namespace_accesses)).find(([key]) =>
+          matchesNamespace(key),
+        )
+      : undefined;
+
+    const groupResult = !group
+      ? ctx.mk('operators-group-entitled', 'fail', `No group named "${ctx.groupName}".`)
+      : ctx.check(
+          'operators-group-entitled',
+          groupGrant?.[1]?.permission === REQUIRED_PERMISSION,
+          `Group holds ${groupGrant?.[1]?.permission} on ${groupGrant?.[0]}.`,
+          groupGrant
+            ? `Group holds ${groupGrant[1]?.permission} on your namespace, expected ${REQUIRED_PERMISSION}.`
+            : 'The group exists but has no permission on your namespace — temporalcloud_group creates ' +
+              'the identity, and temporalcloud_group_access is what entitles it.',
+        );
+
+    return [...saResults, groupResult];
   },
 };

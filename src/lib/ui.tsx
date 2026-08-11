@@ -123,6 +123,25 @@ export function RichText({ children }: { children: string }) {
 }
 
 /**
+ * A link out of the portal — almost always deep into the student's own
+ * namespace in the Cloud UI. Its own component because `RichText` renders no
+ * anchors, so a URL in prose is unclickable text.
+ */
+export function ExternalLink({ label, url }: { label: string; url: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-block text-[13px] font-medium text-brand-soft underline
+                 decoration-brand-soft/40 underline-offset-2 hover:decoration-brand-soft"
+    >
+      {label} ↗
+    </a>
+  );
+}
+
+/**
  * A shell command with the outcome the student should see beneath it.
  *
  * Used by both "Use what you built" — where nothing is graded, so `grades` is
@@ -132,7 +151,8 @@ export function RichText({ children }: { children: string }) {
  *
  * `snippet` is the step's own artifact — the file the step is asking for. It
  * renders above `command` so a step can hand over the configuration and then
- * the command that consumes it, in that order.
+ * the command that consumes it, in that order. `link` renders last: where to go
+ * and watch what the command did.
  */
 export function CommandStep({
   index,
@@ -141,6 +161,7 @@ export function CommandStep({
   expect,
   grades,
   snippet,
+  link,
 }: {
   index: number;
   label: string;
@@ -149,6 +170,7 @@ export function CommandStep({
   /** Human-readable title of the checkpoint this step satisfies. */
   grades?: string;
   snippet?: ReactNode;
+  link?: { label: string; url: string };
 }) {
   return (
     <li className="border-l-2 border-line-subtle/60 pl-4">
@@ -171,6 +193,11 @@ export function CommandStep({
         <p className="mt-2 text-[13px] leading-6 text-content-subtle">
           <span className="font-medium text-content-secondary">Expect:</span>{' '}
           <RichText>{expect}</RichText>
+        </p>
+      )}
+      {link && (
+        <p className="mt-2">
+          <ExternalLink label={link.label} url={link.url} />
         </p>
       )}
     </li>

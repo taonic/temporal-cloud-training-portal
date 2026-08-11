@@ -113,23 +113,28 @@ async function main() {
       );
     }
 
-    /* -- Custom role headroom (Session 3) -------------------------------- */
-    console.log(`\nCustom roles (Session 3, cap 25 per account)`);
+    /* -- Custom role debris ---------------------------------------------- */
+    //
+    // No lab creates a custom role any more — Session 2 builds a
+    // namespace-scoped service account instead — so this is no longer a
+    // gating check. It stays because the cap is per account and permanent:
+    // roles left behind by an earlier cohort, or by an instructor demo, are
+    // worth seeing before someone hits 25 and cannot work out why.
+    console.log(`\nCustom roles (no lab creates one; cap 25 per account)`);
     try {
       const roles = await listCustomRoles();
-      const free = CUSTOM_ROLE_CAP - roles.length;
-      ok(`${roles.length} custom role(s) exist — room for ${free} more`);
-      if (free < 20) {
+      ok(`${roles.length} custom role(s) exist — ${CUSTOM_ROLE_CAP - roles.length} slot(s) free`);
+      if (roles.length > 0) {
         warn(
-          `Session 3 creates one per student. ${free} free slot(s) caps your cohort at ${free}; ` +
-            'beyond that, pre-create one shared role and have students assign it instead.',
+          'these are leftovers, not something a session needs. The sweeper deletes the ones it can ' +
+            'attribute to a student window; the rest are yours to review.',
         );
       }
     } catch (err) {
-      bad(
+      skip(
         `cannot list custom roles: ${reason(err)}\n` +
-          `      Custom Roles are Pre-release. If they are not enabled on this account, Session 3's ` +
-          `custom-role checkpoints cannot pass — ask Temporal support to enable them.`,
+          `      Custom Roles are Pre-release and no session depends on them, so this is not a ` +
+          `failure — only the leftovers report is unavailable.`,
       );
     }
   }

@@ -136,6 +136,11 @@ export interface LabStep {
    * step 6 is talking about. At most one step per session claims it.
    */
   snippet?: boolean;
+  /**
+   * Where to go and watch what this step did — deep-linked into the student's
+   * own namespace. Prose cannot carry it: `RichText` renders no anchors.
+   */
+  link?: { label: string; url: string };
 }
 
 export interface UseSection {
@@ -213,15 +218,6 @@ export interface SessionDef {
   prerequisites?: Prerequisite[] | ((ctx: SnippetContext) => Prerequisite[]);
   /** Docs to keep open during the lab. */
   references?: ReferenceGroup[];
-  /**
-   * True when the lab runs `labs/worker`, which needs TEMPORAL_ADDRESS /
-   * _NAMESPACE / _API_KEY, and the values were established in an earlier
-   * session. Only those sessions show the Connection details block — Session 2
-   * drives the `temporal` CLI instead and would just be carrying an extra card
-   * nobody needs, and Session 1's lab sets the credentials itself, so the card
-   * would repeat a command already on the same screen.
-   */
-  needsWorker?: boolean;
   /** Shown above the steps when there is something they must know first. */
   note?: string;
   /** Prose instructions. Static, so it cannot carry personalised values. */

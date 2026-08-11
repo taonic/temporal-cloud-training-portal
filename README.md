@@ -140,9 +140,11 @@ and then pruned; anything still alive from a pruned window degrades to drift rat
 
 Covered kinds: namespaces, users, service accounts, API keys, groups, custom roles, Nexus endpoints
 — i.e. everything a Global Admin can create that outlives their own deletion, including **users they
-invite themselves**, who arrive with no 48-hour timer of their own. Groups and custom roles are on
-that list because Session 2 has students create them; leaving either out would silently accumulate
-debris in the account, and custom roles would burn the 25-role cap permanently.
+invite themselves**, who arrive with no 48-hour timer of their own. Groups are on that list because
+Session 2 has students create one; leaving them out would silently accumulate debris in the account.
+Custom roles stay on it even though no lab creates one any more — an account that ran the older
+version of Session 2, or an instructor demo, can still leave them behind, and they burn a 25-role
+cap permanently.
 
 Set `SWEEPER_MODE=dry-run` for the first pass. It reports `would-delete` and deletes nothing.
 
@@ -216,7 +218,7 @@ the hands-on half and the exit check.
 | Session | Lab | Verified | Attested | Graded via |
 |---|---|---|---|---|
 | 1. Foundations & Control Plane | Provision a namespace with Terraform | 5 (+1 stretch) | 0 | Control plane + data plane |
-| 2. AuthN/Z, RBAC & Deployment | The identity a Worker runs as: scoped custom role, service account, group | 8 | 0 | Control plane + Audit Log |
+| 2. AuthN/Z, RBAC & Deployment | The identity a Worker runs as: namespace-scoped service account, its key, operators group | 5 | 0 | Control plane + Audit Log |
 | 3. Worker Config & Versioning | Roll out v2, drain v1 | 3 | 0 | **Data plane** |
 | 4. Data Security & Encryption | temporal-proxy in front of Cloud, payloads sealed | 1 | 0 | **Data plane** |
 | 5. Observability & Ops | SDK metrics into local Prometheus + Grafana | 2 | 1 | **Data plane** |
@@ -252,25 +254,28 @@ session from three attestations to none. Its control-plane check is worth keepin
 server exists**, since the proxy decrypts at your edge and a codec server would quietly hand Temporal
 Cloud a decode path.
 
-Session 2 is the one that grades properly, because access control *is* control-plane state. It is
-built around **Custom Roles**, which are *additive* — the docs are explicit that they cannot narrow
-or remove what a predefined role grants. So the least-privilege move is to start at `read` and add
-back exactly the actions needed. The `service-account-least-privilege` check therefore **fails a
-student who reaches for `developer`**, because a custom role on top of `developer` narrows nothing
-at all.
+Session 2 is the one that grades properly, because access control *is* control-plane state. It builds
+a **namespace-scoped service account** — `namespace_scoped_access` with `write`, and no account-wide
+access block at all. That is [Temporal's own recommendation](https://docs.temporal.io/cloud/manage-access/service-accounts#scoped)
+for a Worker's API key, and it is the least-privilege identity shape the product offers.
 
-The identity is the one a **Worker** runs as, which forces the lab to be honest about where the
-floor actually is. Every principal must carry a predefined role, and `read` already includes
-`GetUsers`, `GetNamespaces` and `ListNamespaces` account-wide. So the section has students run
-`temporal cloud user list` as their Worker identity and watch it **succeed** — a least-privilege
-lab that stages a fake denial teaches a control that isn't there. `GetAuditLogs` is Global Admin and
-Account Owner only, and that is the real denial the session is built around: the identities doing
-the work cannot read the record of it.
+It used to build an account-scoped service account plus a hand-written **Custom Role**, and that cost
+more than it taught. Creating a custom role and attaching one are Account Owner permissions, so
+students needed a second elevated credential threaded through an aliased provider — a
+workshop-shaped workaround, not a pattern anyone would copy. Custom Roles are also Pre-release,
+capped at 25 per account, and carry a confirmed bug where holding an account-level custom role costs
+the principal its data-plane access. Neither the elevated key nor the cap exists any more: every
+resource in Lab 2 now runs as the student.
 
-Two operational consequences, both handled: custom roles are capped at **25 per account** (preflight
-reports the count and warns when a cohort would exceed it), and they are **Pre-release**, so
-preflight fails loudly if they are not enabled on the account rather than letting Session 2 quietly
-be ungradeable.
+The lesson survives the removal, because it was never really about custom roles. A namespace-scoped
+service account still carries an **implicit `Read` account role** — the docs are explicit — and
+`read` already includes `GetUsers`, `GetNamespaces` and `ListNamespaces` account-wide. There is no
+argument that lowers it: not `none`, and not a custom role, which could only ever add. So the section
+has students run `temporal cloud user list` as their Worker identity and watch it **succeed** — a
+least-privilege lab that stages a fake denial teaches a control that isn't there. The real denials
+are `GetAuditLogs`, which is Global Admin and Account Owner only, and any *other* namespace: the
+identity can enumerate every namespace in the account and act in exactly one. That gap is the reason
+namespace permissions exist separately from account roles.
 
 Adding a session is one file in `src/course/sessions/` plus a line in `src/course/index.ts`. Each
 session owns its checkpoints and its own `grade(ctx)`; the context memoises account reads, so

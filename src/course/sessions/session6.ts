@@ -1,5 +1,5 @@
 import { namespaceTags } from '@/cloud/ops';
-import { LAB_TASK_QUEUE } from '../naming';
+import { LAB_BUILD_ID_V2, LAB_TASK_QUEUE } from '../naming';
 import type { SessionDef } from '../types';
 
 /**
@@ -28,34 +28,26 @@ export const session6: SessionDef = {
   exitCheck: 'Three runbooks drafted; escalation path memorised.',
   labTitle: 'Break it on purpose, three times',
   labMinutes: 15,
-  needsWorker: true,
 
   note:
     'These checks grade the recovery, not the breakage — a completed workflow is stable to observe, ' +
     'a stuck one is not. That means the grader cannot prove you broke anything first. Drill 2 in ' +
     'particular passes for someone who never stopped their workers. It is on you; the point is the ' +
-    'runbook you write afterwards, not the green tick.',
+    `runbook you write afterwards, not the green tick. Every worker below runs \`--version ${LAB_BUILD_ID_V2}\`, ` +
+    'matching the current version Session 3 left on your Worker Deployment. A versioned task queue ' +
+    'routes new executions only to its current version, so an unversioned worker would be handed ' +
+    'nothing here and every drill would look like drill 2.',
 
   labSteps: [
-    `Drill 1 — non-determinism. Start a workflow with id ${DRILL_1_PREFIX}-<yourname> on the v1 worker, then restart the worker with \`dotnet run -- worker --break-determinism\`. The workflow task starts failing on replay; the execution is stuck, not failed, and nothing alerts. Find it, then restart the worker unmodified and watch it complete.`,
+    `Drill 1 — non-determinism. Start a workflow with id ${DRILL_1_PREFIX}-<yourname> against \`dotnet run -- worker --version ${LAB_BUILD_ID_V2}\`, then restart that worker as \`dotnet run -- worker --version ${LAB_BUILD_ID_V2} --break-determinism\` — same build id, changed code, which is precisely the mistake versioning exists to prevent. The workflow task starts failing on replay; the execution is stuck, not failed, and nothing alerts. Find it, then restart the worker unmodified and watch it complete.`,
     `Drill 2 — no workers. Start a workflow, then kill every worker. Watch schedule-to-start grow in the CLI. Nothing is lost. Bring the worker back and let it finish.`,
     `Drill 4 — stuck Activity. Run \`dotnet run -- chaos stuck\`, which starts ${DRILL_4_PREFIX}-<yourname> with an Activity that heartbeats and then hangs. Use the heartbeat to tell "stuck" from "slow", then let the heartbeat timeout fire and watch the retry resume from the last reported progress.`,
     'Watch the instructor break the encryption proxy (drill 3) and note the symptom: the Cloud UI cannot decode payloads. Decide whether that is an incident or expected behaviour.',
-    'Draft the three runbooks — "Workflow stuck", "Non-determinism error", "UI cannot decode payload" — in one document, and tag it below.',
+    'Draft the three runbooks — "Workflow stuck", "Non-determinism error", "UI cannot decode payload" — in one document. Record it by adding a `"session-6" = "<your doc link>"` key to the `temporalcloud_namespace_tags "lab"` block already in `lab1.tf` — add to that block rather than writing a second one, because it manages the namespace\'s COMPLETE tag set and a second declaration would delete every tag the earlier sessions set.',
   ],
 
   snippetLang: 'hcl',
-  snippet: () => `# ADD this key to the temporalcloud_namespace_tags "lab" block in lab1.tf.
-# That resource manages the COMPLETE tag set for the namespace, so declaring a
-# second one here would delete every tag the earlier sessions set.
-#
-#   tags = {
-#     ...keys from earlier sessions...
-#   # The three runbooks plus your escalation matrix.
-#   "session-6" = "https://your-wiki/temporal-runbooks"
-#   }
-
-# --- Escalation, worth writing down before you need it -------------------
+  snippet: () => `# --- Escalation, worth writing down before you need it -------------------
 #
 #   Workflow stuck, no error         -> check pending workflow task for a
 #                                       non-determinism failure; check the task

@@ -9,8 +9,8 @@ labs/
   observability/    Prometheus + Grafana on Docker (Lab 5)
 ```
 
-The Terraform plumbing is already set up — provider, version pin, and the
-API-key variable — so `terraform init` works before you have written a line.
+The Terraform plumbing is already set up — provider and version pin — so
+`terraform init` works before you have written a line.
 **The resources are yours to write**, one file per session, guided by the TODO
 header in each.
 
@@ -34,24 +34,20 @@ cross terminals. There is deliberately no `terraform.tfvars`: the provider reads
 `TEMPORAL_CLOUD_API_KEY` directly, so the key never needs to exist in a file in
 this repo.
 
-There is a third variable, and you do not set it:
+Those two exports are the whole credential story. There is one provider, it is
+you, and every resource in every lab file is attributable to you.
 
-```bash
-TF_VAR_elevated_api_key=<shared service account>   # already exported in the sandbox
-```
-
-Lab 2 creates a Custom Role, which is an Account Owner permission — Global Admin
-cannot, and granting a student that permission strips their data-plane access,
-so the Worker in every other lab would stop working. A shared service account
-holds the delegation instead, and exactly two resources in `lab2.tf` name the
-aliased provider that uses it. Everything else you build runs as you.
+(Lab 2 used to need a second, elevated credential — creating a Custom Role is an
+Account Owner permission. It now builds a namespace-scoped service account,
+which a Global Admin can create directly, so `TF_VAR_elevated_api_key` is gone
+and nothing reads it if your sandbox still exports it.)
 
 ## Per lab
 
 | File | What you write in it |
 |---|---|
 | `lab1.tf` | Namespace, region, retention, and the one `provisioner` tag block |
-| `lab2.tf` | Custom role, Worker service account, its API key, operators group |
+| `lab2.tf` | Namespace-scoped Worker service account, its API key, operators group and access |
 | `lab3.tf` | Nothing — the rollout runs from `labs/worker` and the CLI |
 | `lab4.tf` | Nothing — the work is in `labs/proxy/`, and the check reads payload metadata |
 | `lab5.tf` | Dashboard and alert catalogue tag |
@@ -76,26 +72,24 @@ directory and never delete a session file to "clean up".
 ## What is already done for you, and why
 
 `versions.tf` pins the provider to `~> 1.6`. This matters more than it looks:
-the 0.9 line predates `temporalcloud_custom_role`, `temporalcloud_group` and
-`temporalcloud_namespace_tags`, so Labs 2 onwards would fail to plan against
-it. Do not add a second `terraform` or `provider` block in your session files —
-Terraform allows only one of each per directory.
+the 0.9 line predates `temporalcloud_group`, `temporalcloud_group_access`,
+`namespace_scoped_access` and `temporalcloud_namespace_tags`, so Labs 2 onwards
+would fail to plan against it. Do not add a second `terraform` or `provider`
+block in your session files — Terraform allows only one of each per directory.
 
 ## Two provider quirks that will cost you time
 
-**`resource_ids` is required on every custom-role permission**, even when
-`allow_all = true`. Pass an empty list:
+**`namespace_scoped_access` is mutually exclusive** with `account_access`,
+`account_access_custom_roles` and `namespace_accesses` on
+`temporalcloud_service_account`. Writing both is an *Invalid Attribute
+Combination* at `terraform validate` time, before any API call — which is the
+good case. The namespace in it is also immutable: changing it replaces the
+service account and its API key.
 
-```hcl
-resources = {
-  resource_type = "accounts"
-  resource_ids  = []
-  allow_all     = true
-}
-```
-
-**Attaching a custom role uses `account_access_custom_roles`**, not
-`custom_roles`. The shorter name looks right and does not exist.
+**A group grants nothing on its own.** `temporalcloud_group` creates the
+identity; `temporalcloud_group_access` is a separate resource keyed by the
+group's `id`, and it is the one that carries `namespace_accesses`. Create only
+the first and you have entitled nobody.
 
 ## Getting the Worker's service account key out (Lab 2)
 
@@ -112,8 +106,8 @@ terraform destroy
 ```
 
 Worth doing at the end of the day even though the portal's sweeper removes your
-resources when your 48-hour window closes. Custom roles in particular are capped
-at 25 per account, so releasing yours early is a courtesy to the next cohort.
+resources when your 48-hour window closes. Namespaces in particular are capped
+per account, so releasing yours early is a courtesy to the next cohort.
 
 Never commit `terraform.tfstate` — it holds resource ids and can hold secrets.
 `.gitignore` already covers it.

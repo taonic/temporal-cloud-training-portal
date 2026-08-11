@@ -75,6 +75,27 @@ export interface Access {
   project_accesses?: ProtoMap<{ role?: string }>;
 }
 
+/** `PERMISSION_WRITE` etc. — the namespace half of a grant. */
+export interface NamespaceAccess {
+  permission?: string;
+  /** Present but deprecated; lower-case form such as "write". */
+  permission_deprecated?: string;
+}
+
+/**
+ * A service account limited to ONE namespace, with no account-wide access block
+ * at all. `ServiceAccountSpec` carries either `access` or this — the proto says
+ * "one of Access or NamespaceScopedAccess must be provided, but not both" — so
+ * anything reading a service account's grants has to look in both places.
+ *
+ * `namespace` is the namespace id and is immutable after creation; the
+ * permission inside it can be changed.
+ */
+export interface NamespaceScopedAccess {
+  namespace?: string;
+  access?: NamespaceAccess;
+}
+
 export interface CloudUser {
   id: string;
   resource_version: string;
@@ -199,7 +220,14 @@ export interface CloudServiceAccount {
   resource_version: string;
   state: ResourceState;
   created_time?: ProtoTimestamp;
-  spec?: { name?: string; description?: string; access?: Access };
+  spec?: {
+    name?: string;
+    description?: string;
+    /** Set on account-scoped service accounts. Mutually exclusive with the next field. */
+    access?: Access;
+    /** Set on namespace-scoped service accounts — what Session 2's lab builds. */
+    namespace_scoped_access?: NamespaceScopedAccess;
+  };
 }
 
 export interface CloudApiKey {

@@ -14,14 +14,6 @@ export const session1: SessionDef = {
   exitCheck: 'Namespaces exist in IaC; region set to Azure Australia East.',
   labTitle: 'Provision a namespace with Terraform',
   labMinutes: 15,
-  /**
-   * No `needsWorker`, despite the stretch goal running labs/worker. That flag
-   * renders the Connection details card, which is another filled-in
-   * `workshop-creds` line — and this session's lab now sets the credentials
-   * itself, three steps in. The card is the right thing on Sessions 3-6, where
-   * the values were established a session ago and the page needs to restate
-   * them; here it would be the same command twice on one screen.
-   */
 
   /**
    * Setup lives in the lab, not in a Prerequisites block above it.

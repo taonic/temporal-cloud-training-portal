@@ -1,5 +1,5 @@
 import { namespaceTags } from '@/cloud/ops';
-import { LAB_TASK_QUEUE } from '../naming';
+import { LAB_BUILD_ID_V2, LAB_TASK_QUEUE } from '../naming';
 import type { SessionDef } from '../types';
 
 /**
@@ -26,7 +26,6 @@ export const session5: SessionDef = {
   exitCheck: 'Dashboard live; alert catalogue reviewed with on-call.',
   labTitle: 'SDK metrics into a local Prometheus and Grafana',
   labMinutes: 15,
-  needsWorker: true,
 
   prerequisites: [
     {
@@ -45,26 +44,16 @@ export const session5: SessionDef = {
 
   labSteps: [
     'Start the stack: `obs-up`. Open the **Grafana** tab (admin/admin) — the Temporal Worker health dashboard is already provisioned. Prometheus has its own tab. Both take a few seconds to come up; reload the tab rather than assuming it failed. See `labs/observability/README.md`.',
-    `Run the worker with metrics exposed: \`dotnet run -- worker --metrics-port ${METRICS_PORT}\`.`,
+    `Run the worker with metrics exposed: \`dotnet run -- worker --version ${LAB_BUILD_ID_V2} --metrics-port ${METRICS_PORT}\`. The \`--version\` is not optional: Session 3 left v${LAB_BUILD_ID_V2} as the deployment's current version, and a versioned task queue hands work only to that version. Drop the flag and your workflows will show up in the UI and sit there forever — pollers present, no error, nothing running.`,
     'Check Prometheus can see it: the **Prometheus** tab → Status → Targets. The temporal-sdk job should be UP. The second target on 9465 stays DOWN until you run a second worker, which is expected.',
     'Generate traffic: `dotnet run -- load --count 50`. A single workflow gives you a dot; fifty gives you a curve.',
     'Open the Grafana dashboard and answer four questions: what is p99 workflow-task schedule-to-start, what is the sticky cache hit rate, how many task slots stay free, and is anything failing.',
     'Now break something. Kill the worker while load is running and watch schedule-to-start climb and pollers drop to zero. Restart it and watch recovery.',
-    'Decide one paging alert and one ticket alert, write both into a document with the dashboard link, and tag it below.',
+    'Decide one paging alert and one ticket alert, and write both into a document with the dashboard link. Record it by adding a `"session-5" = "<your doc link>"` key to the `temporalcloud_namespace_tags "lab"` block already in `lab1.tf` — add to that block rather than writing a second one, because it manages the namespace\'s COMPLETE tag set and a second declaration would delete every tag the earlier sessions set.',
   ],
 
   snippetLang: 'hcl',
-  snippet: () => `# ADD this key to the temporalcloud_namespace_tags "lab" block in lab1.tf.
-# That resource manages the COMPLETE tag set for the namespace, so declaring a
-# second one here would delete every tag the earlier sessions set.
-#
-#   tags = {
-#     ...keys from earlier sessions...
-#   # Dashboard link plus your two alert definitions.
-#   "session-5" = "https://your-wiki/temporal-worker-health"
-#   }
-
-# --- Not Terraform: the worker options that emit the metrics -------------
+  snippet: () => `# --- Not Terraform: the worker options that emit the metrics -------------
 #
 #   var runtime = new TemporalRuntime(new()
 #   {

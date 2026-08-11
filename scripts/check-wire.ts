@@ -33,7 +33,7 @@ const CASES: Case[] = [
   },
   {
     rpc: 'CreateUser',
-    why: 'a dropped custom_roles list fails Session 2 with PermissionDenied, hours later',
+    why: 'custom_roles on the wrong nesting level is dropped in silence (STUDENT_CUSTOM_ROLE_IDS)',
     request: {
       spec: {
         email: 'student@example.com',
@@ -109,12 +109,12 @@ const CASES: Case[] = [
   },
   {
     rpc: 'GetCustomRoles',
-    why: 'Session 2 grades custom roles against a 25-per-account cap',
+    why: 'preflight reports leftover custom roles against a 25-per-account cap',
     request: { page_size: 100, page_token: '' },
   },
   {
     rpc: 'DeleteCustomRole',
-    why: 'a dropped role_id burns one of only 25 custom role slots, permanently',
+    why: 'a dropped role_id leaves a leftover role burning one of only 25 slots, permanently',
     request: { role_id: 'r-1', resource_version: 'v1', async_operation_id: 'sweep-6' },
   },
   {

@@ -6,22 +6,29 @@ using Temporalio.Worker;
 using Temporalio.Workflows;
 
 // Training starter — used in Labs 1 and 3 to 6.
-//dotnet run -- worker --metrics-port 9464.
-//   dotnet run -- worker                          Lab 1: plain worker
+//
+//   dotnet run -- worker                           Lab 1: plain worker
 //   dotnet run -- start                            Lab 1: run one workflow
 //
 //   dotnet run -- worker --version 1.0             Lab 3: versioned worker
 //   dotnet run -- worker --version 2.0             Lab 3: the new version
 //
-//   dotnet run -- worker --break-determinism       Lab 6 drill 1
+//   dotnet run -- worker --version 2.0 --proxy     Lab 4: via temporal-proxy
+//   dotnet run -- start  --proxy                   Lab 4: encrypted payload
+//
+//   dotnet run -- worker --version 2.0 --metrics-port 9464   Lab 5: SDK metrics
+//   dotnet run -- load --count 50                            Lab 5: traffic
+//
+//   dotnet run -- worker --version 2.0 --break-determinism   Lab 6 drill 1
 //   dotnet run -- chaos determinism                Lab 6 drill 1: start it
 //   dotnet run -- chaos stuck                      Lab 6 drill 4
 //
-//   dotnet run -- worker --proxy                   Lab 4: via temporal-proxy
-//   dotnet run -- start  --proxy                   Lab 4: encrypted payload
-//
-//   dotnet run -- worker --metrics-port 9464       Lab 5: expose SDK metrics
-//   dotnet run -- load --count 50                  Lab 5: generate traffic
+// --version FROM LAB 3 ONWARD, and it is not decoration. Lab 3 ends with 2.0 as
+// the Worker Deployment's CURRENT VERSION, and a task queue managed by a
+// versioned deployment routes new executions only to that version. An
+// unversioned worker then polls forever and is handed nothing: workflows appear
+// in the UI and never start, with no error on either side. Labs 1 and 2 run
+// before any of that exists, so they need no flag.
 //
 // Connection comes from TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE and
 // TEMPORAL_API_KEY — the session page prints the exact values for your namespace.
@@ -209,7 +216,8 @@ switch (command)
                 // options being set with versioned mode" — and the workflow task
                 // then retries forever, so the execution hangs instead of
                 // failing. Setting it on the worker keeps the same workflow code
-                // usable by the unversioned workers in Labs 1, 4, 5 and 6.
+                // usable by the unversioned workers in Labs 1 and 2, which run
+                // before any Worker Deployment exists.
                 DefaultVersioningBehavior = VersioningBehavior.Pinned,
             };
             Console.WriteLine($"Versioned worker: {DeploymentName}.{version}");
@@ -217,6 +225,10 @@ switch (command)
         else
         {
             Console.WriteLine("Unversioned worker (no Worker Deployment will be created)");
+            Console.WriteLine(
+                $"  NOTE: if Lab 3 has run, {DeploymentName} has a current version and this worker " +
+                "will be handed NO tasks — workflows will sit in the UI and never start. " +
+                "Add --version 2.0.");
         }
 
         options.AddActivity(Activities.Describe)

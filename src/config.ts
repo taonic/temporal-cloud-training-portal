@@ -70,12 +70,12 @@ const schema = z.object({
   /**
    * Custom role ids attached to every invited student, on top of ROLE_ADMIN.
    *
-   * Session 2's lab creates a custom role, and custom role administration
-   * defaults to the Account Owner — a Global Admin gets PermissionDenied
-   * without a delegated role. Assigning it here means the invitation carries it
-   * rather than someone running `temporal cloud user set-custom-roles` 25 times
-   * at unpredictable moments. Empty is valid: the account may already delegate
-   * by other means, and an unset id must not block invitations.
+   * Leave this empty. No lab needs a custom role any more — Session 2 builds a
+   * namespace-scoped service account, which a Global Admin can create directly —
+   * and a principal holding an account-level custom role loses its DATA-PLANE
+   * access, which would break the Worker in five of the six sessions. It exists
+   * only as generic delegation machinery for an account that needs it for some
+   * other reason. Empty is the expected value and must not block invitations.
    */
   STUDENT_CUSTOM_ROLE_IDS: z
     .string()

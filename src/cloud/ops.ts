@@ -80,10 +80,12 @@ export async function createUser(args: {
   role: AccountRole;
   asyncOperationId: string;
   /**
-   * Custom roles granted alongside the predefined role. Session 2 needs one —
-   * see STUDENT_CUSTOM_ROLE_IDS. `custom_roles` lives on account_access; the
-   * top-level spec.access.custom_roles field is deprecated and ignored after
-   * api-cloud v0.12.0, and a value there is dropped in silence.
+   * Custom roles granted alongside the predefined role. No session needs one —
+   * see STUDENT_CUSTOM_ROLE_IDS, which is expected to be empty. Wired anyway
+   * because the field is a silent-drop trap: `custom_roles` lives on
+   * account_access, and the top-level spec.access.custom_roles is deprecated
+   * and ignored after api-cloud v0.12.0, so a value there vanishes without a
+   * word.
    */
   customRoleIds?: string[];
 }): Promise<{ userId: string; asyncOperation?: AsyncOperation }> {
@@ -378,9 +380,11 @@ export async function snapshotInventory(): Promise<InventoryItem[]> {
       listUsers(),
       listServiceAccounts(),
       listApiKeys(),
-      // Session 3 has students create groups and custom roles; without these
-      // they would survive the sweep. Tolerate failure — groups and custom
-      // roles are not enabled on every account (custom roles are Pre-release).
+      // Session 2 has students create a group; without this it would survive
+      // the sweep. Custom roles are swept too even though no lab creates one
+      // now — an earlier cohort or an instructor demo can still leave them, and
+      // the 25-per-account cap is permanent. Tolerate failure: neither is
+      // enabled on every account (custom roles are Pre-release).
       listUserGroups().catch(() => [] as CloudUserGroup[]),
       listCustomRoles().catch(() => [] as CloudCustomRole[]),
       listNexusEndpoints().catch(() => [] as CloudNexusEndpoint[]),

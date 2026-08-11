@@ -1,4 +1,5 @@
 import { ENCRYPTED_ENCODING } from '@/cloud/dataplane';
+import { LAB_BUILD_ID_V2 } from '../naming';
 import type { SessionDef } from '../types';
 
 /**
@@ -24,12 +25,15 @@ export const session4: SessionDef = {
   exitCheck: 'Ciphertext-only egress verified; key rotation runbook drafted.',
   labTitle: 'Put temporal-proxy in front of Cloud and encrypt the payloads',
   labMinutes: 15,
-  needsWorker: true,
 
   prerequisites: [
     {
       name: 'temporal-proxy',
-      why: 'The encrypting gateway this whole session is about. The image is already pulled in your sandbox; `proxy-up` runs it in the foreground on 127.0.0.1:7233 with the command from `labs/proxy/README.md`.',
+      why:
+        'The encrypting gateway this whole session is about. The image is already pulled in your ' +
+        'sandbox; `proxy-up` runs it in the foreground on 127.0.0.1:7233 with the command from ' +
+        '`labs/proxy/README.md`. That command must invoke the `serve` subcommand — `--config` is ' +
+        'defined on `proxy serve`, not on the bare entrypoint.',
       install: 'proxy-up',
       docs: 'https://github.com/temporalio/temporal-proxy',
     },
@@ -42,16 +46,18 @@ export const session4: SessionDef = {
     'and that substitution is the real deliverable of this session.',
 
   labSteps: [
-    'In a fresh terminal, run `proxy-up`. It listens on 127.0.0.1:7233, against `labs/proxy/config.yaml`. Read what it prints: the proxy wants the SHORT namespace name plus the account, which is exactly what `labs/worker/.env` does not hold — `proxy-up` derives both, and `labs/proxy/README.md` has the full `docker run` if you would rather type it.',
-    'Point the worker at it: `dotnet run -- worker --proxy` in one terminal, `dotnet run -- start --proxy` in another. Note what the worker no longer has — no endpoint, no TLS, no API key.',
-    'Open that workflow in the Cloud UI. The input is readable JSON. Temporal Cloud can see your data, because nothing has encrypted it yet.',
-    'Uncomment the `encryption:` block at the bottom of `labs/proxy/config.yaml`, restart the proxy, and run `dotnet run -- start --proxy` again.',
-    'Open the new workflow in the Cloud UI. The payload is opaque now. Same worker, same code, same namespace — the only change was three lines of proxy config.',
+    'In a fresh terminal, run `proxy-up`. It listens on 127.0.0.1:7233, against `labs/proxy/config.yaml`, and that file ships with `encryption: enabled: true` — every payload it forwards is sealed from the first workflow onward. Read what it prints: the proxy wants the SHORT namespace name plus the account, which is exactly what `labs/worker/.env` does not hold — `proxy-up` derives both, and `labs/proxy/README.md` has the full `docker run` if you would rather type it.',
+    `Point the worker at it: \`dotnet run -- worker --version ${LAB_BUILD_ID_V2} --proxy\` in one terminal, \`dotnet run -- start --proxy\` in another. Note what the worker no longer has — no endpoint, no TLS, no API key. **Keep the \`--version ${LAB_BUILD_ID_V2}\`**: Session 3 left v${LAB_BUILD_ID_V2} as your Worker Deployment's current version, and a versioned task queue routes new executions only to that version. An unversioned worker polls happily and is handed nothing — workflows appear in the UI and never start, with no error anywhere.`,
+    'Now the comparison. Start one more workflow **without** the proxy — `dotnet run -- start`, no flag — which connects straight to Cloud from your own process, carrying the endpoint, the namespace and your API key the way Sessions 1 and 3 did.',
+    'Open both workflows in the Cloud UI. The direct one shows its input as readable JSON; the proxied one is opaque bytes with `encoding: binary/encrypted` and two `encryption-*` metadata keys. Same worker, same workflow code, same namespace — the only difference is which side of the proxy the client sat on.',
+    'Note what did NOT change to get that: no application code, no data converter, no key material anywhere near the worker. Encryption is on by default in `labs/proxy/config.yaml` — three lines of proxy config that the application cannot see and cannot switch off.',
     'Draft the key rotation runbook: who owns the Key Vault key, how `duration` and `renewBefore` roll DEKs, and what happens to workflows whose history was sealed under an older key.',
   ],
 
   snippetLang: 'yaml',
-  snippet: () => `# labs/proxy/config.yaml — the part that matters.
+  snippet: () => `# labs/proxy/config.yaml — the part that matters. Already in the file,
+# already on: you did not have to enable it, and neither would an application
+# team whose platform group runs the proxy.
 #
 # Everything above this in the file is routing: derive the Cloud endpoint from
 # the namespace, append the account, attach the API key, terminate TLS. That is
@@ -100,17 +106,21 @@ encryption:
           'purpose.',
       },
       {
-        label: 'Look at a payload from before you enabled encryption',
-        command: `temporal workflow show --workflow-id <the first one> \\\n  --address ${namespaceId}.tmprl.cloud:7233 \\\n  --namespace ${namespaceId} \\\n  --api-key $TEMPORAL_API_KEY`,
-        expect: 'Your input as readable JSON. This is what Temporal Cloud stores by default.',
+        label: 'Look at the workflow you started WITHOUT the proxy',
+        command: `temporal workflow show --workflow-id <the direct one> \\\n  --address ${namespaceId}.tmprl.cloud:7233 \\\n  --namespace ${namespaceId} \\\n  --api-key $TEMPORAL_API_KEY`,
+        expect:
+          'Your input as readable JSON, tagged `encoding: json/plain`. This is what Temporal Cloud ' +
+          'stores by default, and what it stored for every workflow in Sessions 1 and 3.',
       },
       {
         label: 'Now the one that went through the encrypting proxy',
-        command: `temporal workflow show --workflow-id <the second one> \\\n  --address ${namespaceId}.tmprl.cloud:7233 \\\n  --namespace ${namespaceId} \\\n  --api-key $TEMPORAL_API_KEY`,
+        command: `temporal workflow show --workflow-id <the proxied one> \\\n  --address ${namespaceId}.tmprl.cloud:7233 \\\n  --namespace ${namespaceId} \\\n  --api-key $TEMPORAL_API_KEY`,
         expect:
-          `Opaque bytes, and \`encoding: ${ENCRYPTED_ENCODING}\` in the payload metadata — the field ` +
-          'the exit check reads. Note you are authenticated as an account admin and still cannot ' +
-          'read it: the boundary is the key, not the permission.',
+          `Opaque bytes, \`encoding: ${ENCRYPTED_ENCODING}\` — the field the exit check reads — plus ` +
+          '`encryption-dek` and `encryption-key-id` metadata: the wrapped data key travels with the ' +
+          'payload, which is what lets a DEK rotate without orphaning old history. Note you are ' +
+          'authenticated as an account admin and still cannot read it: the boundary is the key, not ' +
+          'the permission.',
       },
       {
         label: 'Watch the worker read it back perfectly well',
@@ -180,7 +190,10 @@ encryption:
           ? 'No completed workflows to inspect — run one through the proxy first.'
           : `Sampled ${samples.length} workflow(s), none tagged ${ENCRYPTED_ENCODING} (saw ${[
               ...new Set(samples.flatMap((s) => s.encodings)),
-            ].join(', ')}). Uncomment the encryption block in labs/proxy/config.yaml, restart the proxy, and run another workflow.`,
+            ].join(', ')}). Only workflows started with \`--proxy\` are sealed — a direct one is stored ` +
+            `in the clear, which is the comparison the lab asks for. Run \`dotnet run -- start --proxy\` ` +
+            `and let it complete. If it is still unsealed, check that labs/proxy/config.yaml kept ` +
+            `encryption.enabled: true.`,
       ),
     ];
   },

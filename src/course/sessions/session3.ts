@@ -27,7 +27,6 @@ export const session3: SessionDef = {
     'Per-workload task-queue naming, autoscaling policy, versioning strategy, and bug-fix rollout runbook documented.',
   labTitle: 'Roll a new Worker version out, and drain the old one',
   labMinutes: 15,
-  needsWorker: true,
 
   note:
     'Sandbox-scale: two worker processes in your sandbox against your own Cloud namespace. That is ' +
@@ -67,7 +66,11 @@ export const session3: SessionDef = {
       {
         label: `Stop the v${LAB_BUILD_ID_V1} worker, then watch it drain`,
         command: `temporal worker deployment describe --name ${LAB_DEPLOYMENT_NAME} ${conn}`,
-        expect: `v${LAB_BUILD_ID_V1} reports no pollers and moves toward drained. Draining is not instant — it waits for pinned executions to finish, which is exactly why you cannot delete a version on a whim.`,
+        expect: `v${LAB_BUILD_ID_V1} reports no pollers and moves toward drained. Draining is not instant — it waits for pinned executions to finish, which is exactly why you cannot delete a version on a whim. The Cloud UI shows the same thing with the drainage status per version, and is the better place to watch it change.`,
+        link: {
+          label: `Watch it drain in the Cloud UI — ${LAB_DEPLOYMENT_NAME} in ${namespaceId}`,
+          url: `https://cloud.temporal.io/namespaces/${namespaceId}/workers/deployments/${LAB_DEPLOYMENT_NAME}`,
+        },
       },
       {
         label: 'Write down the rollback step you would run if v2 turned out to be bad',

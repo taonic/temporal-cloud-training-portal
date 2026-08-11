@@ -27,35 +27,69 @@ export TEMPORAL_NAMESPACE=training-<you>         # short name, no .account
 export TEMPORAL_ACCOUNT=bvmon
 export TEMPORAL_API_KEY=<your Temporal Cloud API key>
 
-docker run --rm -p 7233:7233 \
+docker run --rm -p 127.0.0.1:7233:7233 \
   -v "$PWD/labs/proxy/config.yaml:/config.yaml:ro" \
   -e TEMPORAL_NAMESPACE -e TEMPORAL_ACCOUNT -e TEMPORAL_API_KEY \
-  temporalio/temporal-proxy:latest --config /config.yaml
+  temporalio/temporal-proxy:latest serve --config /config.yaml
 ```
 
-It listens on `127.0.0.1:7233`.
+Reachable at `127.0.0.1:7233` on this machine. Note where each half of that lives: the container
+publishes the port to your loopback (`-p 127.0.0.1:7233:7233`), while `config.yaml` binds
+`0.0.0.0:7233` **inside** the container. Bind the container's loopback instead and Docker's published
+port forwards to an address nothing is listening on — the worker's TCP connect succeeds against the
+port forwarder and then dies with
+
+```
+get_system_info call error after connection: ... connection closed
+```
+
+which reads like a credential or upstream fault and is neither.
+
+**`serve` is not optional.** The image's entrypoint is the bare `proxy` binary, and `--config` is
+defined on its `serve` subcommand, not on the root command. Leave `serve` out and you get:
+
+```
+Incorrect Usage: flag provided but not defined: -config
+```
+
+which reads like the flag was renamed rather than like a missing subcommand. `-c` is an accepted
+alias, and `PROXY_CONFIG` an accepted environment variable, but both still need `serve`.
 
 ## Point the Worker at it
 
 ```bash
 cd labs/worker
-dotnet run -- worker --proxy      # terminal 2
-dotnet run -- start  --proxy      # terminal 3
+dotnet run -- worker --version 2.0 --proxy   # terminal 2
+dotnet run -- start  --proxy                 # terminal 3
 ```
 
 `--proxy` connects in plaintext to `127.0.0.1:7233` with the short namespace and **no credentials at
 all** — that is the whole point. The Worker carries no endpoint, no TLS material, and no API key.
 
+`--version 2.0` is separate and also required: Lab 3 leaves `2.0` as the Worker Deployment's current
+version, and a versioned task queue routes new executions only to that version. Without it the
+worker polls and is handed nothing, and the workflow sits in the UI having never started.
+
 ## The lab
 
-1. Run it **with encryption off** (the block at the bottom of `config.yaml` commented out). Start a
-   workflow, then open it in the Cloud UI. The input is readable JSON.
-2. Uncomment the `encryption:` block, restart the proxy, and run another workflow.
-3. Open that one in the Cloud UI. The payload is now opaque bytes — Temporal Cloud is holding data
-   it cannot read.
+**Encryption is on by default** — the `encryption:` block at the bottom of `config.yaml` ships
+enabled, so every payload the proxy forwards is sealed from the first workflow onward. You do not
+switch it on; you find out what it did.
 
-The exit check verifies step 3 by reading the payload metadata from your namespace and looking for
-`encoding: binary/encrypted`. It is not taking your word for it.
+1. Start a workflow **through the proxy**: `dotnet run -- start --proxy`. Open it in the Cloud UI —
+   the input is opaque bytes.
+2. Start one **without** the proxy: `dotnet run -- start`, which connects straight to Cloud carrying
+   the endpoint, namespace and your API key. Open that one — the input is readable JSON.
+3. Compare them. Same worker, same workflow code, same namespace; the only difference is which side
+   of the proxy the client sat on.
+
+The exit check verifies step 1 by reading the payload metadata from your namespace and looking for
+`encoding: binary/encrypted`. It is not taking your word for it — and it only ever sees the sealed
+form, because it has no key.
+
+Mixing the two is safe: a plaintext payload passes back through the proxy untouched, so the direct
+workflow still completes on a proxy-connected worker. If you would rather see the toggle, comment
+`enabled: true` out and restart — but the two-command comparison above needs no restart at all.
 
 ## About that key
 

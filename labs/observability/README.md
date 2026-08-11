@@ -47,11 +47,16 @@ To find the culprit: `lsof -nP -iTCP:3030 -sTCP:LISTEN` (macOS/Linux).
 In another terminal, with the environment variables from your session page exported:
 
 ```bash
-cd ../dotnet
-dotnet run -- worker --metrics-port 9464
+cd ../worker
+dotnet run -- worker --version 2.0 --metrics-port 9464
 ```
 
 You should see `SDK metrics on http://localhost:9464/metrics`.
+
+`--version 2.0` matches the current version Lab 3 left on the `training-workers` Worker Deployment.
+A versioned task queue routes new executions only to its current version, so an unversioned worker
+is handed no tasks at all — the load you generate below would appear in the Cloud UI and never run.
+The worker prints a warning if you forget.
 
 ## 3. Confirm Prometheus found it
 
@@ -62,7 +67,7 @@ The second target on `9465` stays **DOWN** — that is deliberate. Run a second 
 you want to see per-worker metrics side by side:
 
 ```bash
-dotnet run -- worker --metrics-port 9465
+dotnet run -- worker --version 2.0 --metrics-port 9465
 ```
 
 ## 4. Generate traffic

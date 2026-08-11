@@ -285,6 +285,7 @@ export default async function SessionPage({
                           <Code lang={session.snippetLang}>{snippet}</Code>
                         ) : undefined
                       }
+                      link={step.link}
                     />
                   ))}
                 </ol>
@@ -328,41 +329,6 @@ export default async function SessionPage({
             <p className="mb-5 text-[14px] leading-6 text-content-secondary">
               <RichText>{use.intro}</RichText>
             </p>
-
-            {/* Only where the lab actually runs labs/worker. Sessions 2 and 3
-                drive the `temporal` CLI with a different credential, so the
-                block would be noise there. */}
-            {snippetContext && session.needsWorker && (
-              <div className="mb-6 rounded-lg border border-line-subtle/50 bg-surface-table/25 p-4">
-                <div className="label mb-2">Connection details</div>
-                <p className="mb-3 text-[13px] leading-6 text-content-secondary">
-                  Your three values. <code>workshop-creds</code> writes all of them to your shell{' '}
-                  <em>and</em> to <code>labs/worker/.env</code>, so there is no file to edit by hand.
-                  Run it bare to be prompted (the key is not echoed), or paste the filled-in form
-                  below. Where the two disagree, <code>labs/worker/.env</code> wins — from Session 2
-                  it holds the Worker&apos;s own key while your shell still carries your admin one,
-                  and the Worker must run as the Worker.
-                </p>
-                <Code>
-                  {`# TEMPORAL_ADDRESS    your namespace id + .tmprl.cloud:7233
-# TEMPORAL_NAMESPACE  the namespace id itself — <namespace>.<account>,
-#                     account suffix included. Leaving it off is the
-#                     single most common way to lose ten minutes here.
-# TEMPORAL_API_KEY    your key from Session 1. Shown once, never again.
-
-workshop-creds ${snippetContext.namespaceId}.tmprl.cloud:7233 ${snippetContext.namespaceId} <YOUR-API-KEY>`}
-                </Code>
-                <p className="mt-3 text-[13px] leading-6 text-content-subtle">
-                  From Session 2 onward that is the <em>Worker&apos;s own</em> key, not yours —
-                  Session 2 writes this file for you with{' '}
-                  <code>terraform output -raw worker_api_key</code>. Before then, your personal key
-                  from Session 1 works. No Cloud namespace yet? Every mode also runs against a local
-                  dev server: <code>dev-server-up</code>, then{' '}
-                  <code>dotnet run -- worker --local</code>. Stop it with <code>dev-server-down</code>{' '}
-                  before Session 4 — the proxy wants port 7233.
-                </p>
-              </div>
-            )}
 
             <ol className="space-y-5">
               {use.steps.map((step, i) => (

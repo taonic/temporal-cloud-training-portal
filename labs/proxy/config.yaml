@@ -17,9 +17,27 @@
 #   docker run --rm -p 7233:7233 \
 #     -v "$PWD/labs/proxy/config.yaml:/config.yaml:ro" \
 #     -e TEMPORAL_NAMESPACE -e TEMPORAL_ACCOUNT -e TEMPORAL_API_KEY \
-#     temporalio/temporal-proxy:latest --config /config.yaml
+#     temporalio/temporal-proxy:latest serve --config /config.yaml
+#
+# `serve` is required: the image entrypoint is the bare `proxy` binary and
+# --config is defined on its serve subcommand. Without it the proxy exits with
+# "Incorrect Usage: flag provided but not defined: -config".
 
-hostPort: 127.0.0.1:7233
+# The address the GATEWAY listens on, inside the container.
+#
+# 0.0.0.0, not 127.0.0.1. The proxy runs in a container with -p 7233:7233, and
+# Docker forwards the published port to the container's eth0 address — nothing
+# is listening there if the gateway bound the container's loopback. The TCP
+# connect still succeeds against docker's port forwarder and then dies, so the
+# worker reports
+#
+#   get_system_info call error after connection: ... connection closed
+#
+# which reads like an upstream or credential problem and is neither. Upstream's
+# own containerised example uses ":7233" for the same reason; the 127.0.0.1 form
+# is for running the binary directly on your machine. Publishing with
+# -p 127.0.0.1:7233:7233 is what keeps it reachable only from this host.
+hostPort: 0.0.0.0:7233
 
 routing:
   default: cloud # namespaced requests -> per-namespace endpoint
@@ -49,8 +67,9 @@ upstreams:
         apiKey: ${TEMPORAL_API_KEY}
 
 # ---------------------------------------------------------------------------
-# STEP 2 OF THE LAB. Leave this commented for the first run, look at a payload
-# in the Cloud UI, then uncomment it, restart the proxy, and look again.
+# Envelope encryption, ON by default. Every payload the proxy forwards to Cloud
+# is sealed on the way out and opened on the way back, so the worker exchanges
+# cleartext with the proxy and Temporal Cloud only ever stores ciphertext.
 #
 # The key below is a throwaway held in this file. The "testing://" scheme is a
 # local in-process key with no KMS behind it — the proxy's own docs say "for
@@ -62,12 +81,16 @@ upstreams:
 #   uri: azurekeyvault://<vault>.vault.azure.net/keys/<key>
 #
 # and the proxy wraps every data encryption key through Key Vault instead.
-# ---------------------------------------------------------------------------
 #
-# encryption:
-#   enabled: true
-#   cacheSize: 200
-#   default:
-#     uri: testing://KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=
-#     duration: 1h
-#     renewBefore: 15m
+# To see what the proxy is buying you, comment `enabled: true` out (or set it to
+# false), restart the proxy, and start another workflow: its input lands in Cloud
+# as readable JSON. That comparison is the lab.
+# ---------------------------------------------------------------------------
+
+encryption:
+  enabled: true
+  cacheSize: 200
+  default:
+    uri: testing://KioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKio=
+    duration: 1h
+    renewBefore: 15m

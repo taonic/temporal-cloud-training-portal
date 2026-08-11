@@ -2,7 +2,7 @@
 
 Everything you need to run the workshop, in the order you need it. Read the
 [Limits and known sharp edges](#limits-and-known-sharp-edges) section before you commit to a date —
-two items in it have **lead times you do not control**.
+the first item in it has a **lead time you do not control**.
 
 ---
 
@@ -23,68 +23,32 @@ claim is what's recorded). Never present an attested check as proof.
 
 ### T-minus 2 weeks — the things with lead times
 
-These are the two that can kill a workshop date, because someone else has to act.
+One item here can still kill a workshop date, because someone else has to act. The second used to,
+and no longer does — it is kept so you know not to go looking for it.
 
 - [ ] **Raise the namespace limit.** Accounts start at **10**. Every student creates one in
       Session 1. The documented auto-raise only triggers for namespaces with *running workflows*,
       which lab namespaces won't have. Open a support ticket for `cohort size + existing + headroom`.
       `pnpm ops:preflight` prints your current count.
-- [ ] **Confirm Custom Roles are enabled on `bvmon`.** They are **Pre-release**. Session 2 is built
-      around them and its custom-role checkpoints simply cannot pass without them. Preflight fails
-      loudly if they're missing — run it now, not in week three.
-- [ ] **Delegate custom-role administration to Global Admin.** Enabled is not sufficient.
-      [Custom role administration defaults to the Account Owner](https://docs.temporal.io/cloud/manage-access/custom-roles#delegating-custom-roles),
-      and students are invited as Global Admin, so Session 2's first `terraform apply` dies with
-      `rpc error: code = PermissionDenied desc = request unauthorized` on
-      `temporalcloud_custom_role`. Preflight does **not** catch this: it authenticates as Account
-      Owner, which can always do it.
+- [ ] **Session 2 needs nothing from you any more.** It used to need two things with lead times:
+      Custom Roles enabled on the account (they are Pre-release), and custom-role administration
+      delegated to Global Admin via a shared elevated service account. Lab 2 now builds a
+      **namespace-scoped service account** — `namespace_scoped_access` with `write`, no account-wide
+      access block — which a Global Admin can create directly. No custom role, no second credential,
+      no `TF_VAR_elevated_api_key`, and nothing to ask Temporal support for.
 
-      **Run this once, as Account Owner:**
+      `scripts/create-role-admin-sa.sh` and `scripts/custom-role-delegation.json` are retired. They
+      still work if you want a delegation role for something else; no session runs them. If your
+      Instruqt preset still injects `WORKSHOP_ELEVATED_API_KEY`, nothing reads it — see
+      [Retired: custom roles and the elevated key](#retired-custom-roles-and-the-elevated-key) for
+      what that machinery was for and why it went.
 
-      ```bash
-      TEMPORAL_API_KEY=<account-owner key> ./scripts/create-role-admin-sa.sh
-      ```
-
-      It applies the delegation role from `scripts/custom-role-delegation.json`, creates the
-      `workshop-terraform` service account with that role attached, and prints an API key. The key
-      is shown once. Re-running the script is safe; it reuses what already exists.
-
-      The role spec needs **two** permission blocks, because the
-      [permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions)
-      has two tables. `cloud.customrole.assign`, `.create` and `.list` are scoped to `accounts`;
-      `.get`, `.update` and `.delete` are scoped to the `custom-roles` resource type. Mixing them
-      into one account-scoped block is rejected outright:
-
-      ```
-      InvalidArgument desc = invalid action: cloud.customrole.update for resource type: accounts
-      ```
-
-      `assign` is the one people leave out. Lab 2 attaches the role to the Worker's service
-      account, which *is* an assign — without it the apply dies one resource later than expected.
-
-      **The key goes to the service account, never to the students.** Confirmed Temporal Cloud bug:
-      a principal holding an **account-level custom role loses its data-plane access**. The control
-      plane still works — `temporal cloud whoami` authenticates, and `namespace user list` still
-      reports `PERMISSION_ADMIN` with `InheritedAccess true` — but `temporal workflow list` against
-      their own namespace returns `Request unauthorized`. Sessions 1, 3, 4, 5 and 6 all run workers,
-      so a student carrying that role would lose five sessions to buy one. Leave
-      `STUDENT_CUSTOM_ROLE_IDS` unset.
-
-      The service account absorbs the bug instead, and does not care: it never polls a task queue.
-      Then inject its key into Instruqt — see
-      [Injecting the elevated key into Instruqt](#injecting-the-elevated-key-into-instruqt).
-
-      Other approaches, if you would rather not run a second identity, are in
-      [Custom roles: the options](#custom-roles-the-options) below.
-
-      The docs call out the privilege-escalation risk in delegating this, and they are right: a
-      principal that can create and assign roles can grant itself anything. In a throwaway training
-      account where every student is already Global Admin for 48 hours, that is not a new exposure.
-      Do not copy the pattern into a real account.
-
-      Not delegating is not really an option. Pre-creating one shared role as Account Owner still
-      leaves students unable to attach it to their service account without `cloud.customrole.assign`,
-      so it narrows the delegation rather than avoiding it.
+      The bug that drove all of it is worth remembering, because it is still open: a principal
+      holding an **account-level custom role loses its data-plane access**. The control plane keeps
+      working — `temporal cloud whoami` authenticates, `namespace user list` still reports
+      `PERMISSION_ADMIN` — but `temporal workflow list` against their own namespace returns
+      `Request unauthorized`. Leave `STUDENT_CUSTOM_ROLE_IDS` unset; a student carrying such a role
+      would lose Sessions 1, 3, 4, 5 and 6 to buy nothing.
 
 ### T-minus 1 week
 
@@ -171,18 +135,17 @@ Ordered by how likely they are to bite you.
 | # | Limit | Consequence | Mitigation |
 |---|---|---|---|
 | 1 | **10 namespaces** default per account | Session 1 fails for everyone past the tenth student | Support ticket, 2 weeks ahead |
-| 2 | **25 custom roles** per account, no documented auto-raise | Session 2 caps your cohort around 20 | Preflight reports headroom; beyond ~20, pre-create one shared role |
-| 3 | **Custom Roles are Pre-release** | Session 2's headline checkpoints ungradeable if not enabled | Verify with preflight *now* |
-| 4 | **Link rotates at midnight `Australia/Sydney`** | Students lose portal access on day 2 while still holding Cloud access for 48h | Re-paste the new link on day two. Accepted trade-off |
-| 5 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop; failing that, set `PORTAL_BLOCKED_EMAIL_DOMAINS` to the consumer mail providers |
-| 6 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
-| 7 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
-| 8 | **Session 5 is nearly unverifiable** | SDK metrics and Grafana live in the student's sandbox; the portal can only confirm a worker polled and workflows ran | Walk the room and look at screens |
-| 9 | **temporal-proxy is Pre-release** | "Not ready for production use" per its own front page — fine for teaching, not a shipping recommendation | Say so; the session page does |
-| 10 | **No provenance in the API** | "Created via Terraform" is unverifiable, ever | Session 1 grades the **tag** `provisioner=terraform`, and the checkpoint is named for that rather than for provenance |
-| 11 | **One machine, must stay up** | Stopping it stops every pending 48h revocation and the sweeper | `auto_stop_machines = false`. Don't "optimise" it |
-| 12 | **Worker Deployments are public preview** | Session 3 ungradeable if unavailable; NOT_FOUND is indistinguishable from an unversioned worker | Test against a real namespace before the workshop |
-| 13 | **Drill 2 cannot be truly verified** | It passes for a student who never stopped their workers | Honour system, stated on the page |
+| 2 | **A namespace-scoped service account's namespace is immutable** | A student who scopes Lab 2's service account to the wrong namespace must destroy and recreate it, key included | The portal fills the id in for them; the checkpoint names the namespace it expected |
+| 3 | **Link rotates at midnight `Australia/Sydney`** | Students lose portal access on day 2 while still holding Cloud access for 48h | Re-paste the new link on day two. Accepted trade-off |
+| 4 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop; failing that, set `PORTAL_BLOCKED_EMAIL_DOMAINS` to the consumer mail providers |
+| 5 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
+| 6 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
+| 7 | **Session 5 is nearly unverifiable** | SDK metrics and Grafana live in the student's sandbox; the portal can only confirm a worker polled and workflows ran | Walk the room and look at screens |
+| 8 | **temporal-proxy is Pre-release** | "Not ready for production use" per its own front page — fine for teaching, not a shipping recommendation | Say so; the session page does |
+| 9 | **No provenance in the API** | "Created via Terraform" is unverifiable, ever | Session 1 grades the **tag** `provisioner=terraform`, and the checkpoint is named for that rather than for provenance |
+| 10 | **One machine, must stay up** | Stopping it stops every pending 48h revocation and the sweeper | `auto_stop_machines = false`. Don't "optimise" it |
+| 11 | **Worker Deployments are public preview** | Session 3 ungradeable if unavailable; NOT_FOUND is indistinguishable from an unversioned worker | Test against a real namespace before the workshop |
+| 12 | **Drill 2 cannot be truly verified** | It passes for a student who never stopped their workers | Honour system, stated on the page |
 
 ### What the sweeper will *not* clean up
 
@@ -204,7 +167,7 @@ clean sweep, or revoke by hand in the Cloud UI first.
 | Session | Verified / attested | Needs from you |
 |---|---|---|
 | 1. Foundations & Control Plane | 5 / 0 | Namespace quota raised |
-| 2. AuthN/Z, RBAC & Deployment | 8 / 0 | Custom Roles enabled |
+| 2. AuthN/Z, RBAC & Deployment | 5 / 0 | Nothing — every resource runs as the student |
 | 3. Worker Config & Versioning | 3 / 0 | Worker Deployments available (public preview) |
 | 4. Data Security & Encryption | 4 / 0 | Nothing — sandbox-scale, one Go binary via `proxy-up` |
 | 5. Observability & Ops | 2 / 1 | Nothing — images pre-pulled in the sandbox, started with `obs-up` |
@@ -214,27 +177,42 @@ clean sweep, or revoke by hand in the Cloud UI first.
 Let fast finishers run `labs/worker`; tell them to try `start` *without* a worker first, so they
 see a workflow sit in schedule-to-start deliberately.
 
-**Session 2** — the sharp edge is that Custom Roles are **additive** and cannot narrow a predefined
-role. Students who reach for `developer` fail the check on purpose. Expect to explain this; it is
-also quiz question 2.1, which usually splits the room.
+**Session 2** — the lab builds a **namespace-scoped** service account: `namespace_scoped_access`
+with `write`, and no account-wide access block at all. That is Temporal's documented recommendation
+for a Worker's API key. It replaced a version built on a hand-written Custom Role, which needed a
+second elevated credential and hit a Pre-release feature with an open data-plane bug. Nothing to
+prepare, and every resource in the lab runs as the student.
+
+Two things students get wrong, both by reflex. They add `account_access = "read"` alongside
+`namespace_scoped_access`, and the provider refuses the combination at `terraform validate` — worth
+letting them hit, because it is the fastest way to learn that this shape has no account role to
+tune. And they create `temporalcloud_group` without `temporalcloud_group_access`, which entitles
+nobody; the checkpoint says so in as many words.
+
+Custom roles are still worth ten minutes on the whiteboard, and quiz question 2.1 still covers them:
+they are **additive**, so a custom role on top of `developer` narrows nothing. The lab's own comments
+make the point — there is nothing for a custom role to add to an identity that already has exactly
+one namespace permission. Do not offer to demo creating one on `bvmon`; it is an Account Owner
+permission and the roles are capped at 25 per account permanently.
 
 Read the "Use what you built" section before you teach it, because it deliberately ends in a
 surprise. The identity is the one a **Worker** runs as, and students run `temporal cloud user list`
-and `temporal cloud namespace list` with it and watch **both succeed**. That is correct and
-intended: every principal must carry a predefined role, and Read-Only already grants `GetUsers`,
-`GetNamespaces` and `ListNamespaces` account-wide, so no custom role can take them away. Someone
-will call it a bug. It is the most useful thing in the session — for a bank in particular, "our
-service accounts are read-only" does not mean what people assume. The account-level role table is
-linked from the page; put it on screen.
+and `temporal cloud namespace list` with it and watch **both succeed** — having written no account
+access whatsoever. That is correct and intended: a namespace-scoped service account always carries
+an implicit `Read` account role, and Read-Only already grants `GetUsers`, `GetNamespaces` and
+`ListNamespaces` account-wide. Nothing lowers it. Someone will call it a bug. It is the most useful
+thing in the session — for a bank in particular, "our service accounts are read-only" does not mean
+what people assume. The permissions reference is linked from the page; put it on screen.
 
-The genuine denial is `temporal cloud account audit-log list`: `GetAuditLogs` is Global Admin and
-Account Owner only. Pair it with the audit-log read they did earlier as themselves — the identities
-doing the work cannot read the forensic record of it, which is the whole reason the record is worth
-keeping.
+Two genuine denials follow, and they are the pair worth landing. `temporal cloud account audit-log
+list` fails because `GetAuditLogs` is Global Admin and Account Owner only — pair it with the
+audit-log read they did earlier as themselves, so they see that the identities doing the work cannot
+read the forensic record of it. Then `temporal workflow list` against a *colleague's* namespace
+fails: it can enumerate every namespace in the account and act in exactly one. That gap is why
+namespace permissions exist separately from account roles.
 
-This is also the session with the largest checkpoint count (8) and no worker, so it runs on the
-control plane alone. Project `/instructor` while they work — watching their own service accounts and
-API keys appear is the lesson.
+This session has no worker, so it runs on the control plane alone. Project `/instructor` while they
+work — watching their own service accounts, keys and groups appear is the lesson.
 
 **Session 3** — sandbox-scale: two `labs/worker` worker processes against their own namespace is
 enough to create a real Worker Deployment with two versions and shift traffic. Teaches
@@ -252,10 +230,40 @@ plane whether or not the control plane can see it. Worth saying out loud that th
 session has no attestations while an infrastructure-shaped version of it would have been all
 attestation.
 
+**Encryption ships ON.** `labs/proxy/config.yaml` has `encryption.enabled: true`, so the first
+workflow through the proxy is already sealed — the lab no longer has students uncomment a block and
+restart. The reveal is a comparison instead: one workflow with `--proxy`, one without, opened side by
+side in the Cloud UI. Two commands, no restart, and it lands the point better, because "the platform
+team turned this on and the application cannot see it" is the actual pattern. Mixing is safe —
+plaintext passes back through the proxy untouched, so the direct workflow still completes on the
+proxy-connected worker.
+
 Two things to pre-empt. The proxy is **Pre-release** and says so on its own front page — teach it,
 don't recommend shipping it. And the second real check is that **no codec server exists**: a codec
 server would hand Temporal Cloud the decode path the whole pattern exists to withhold, so a student
 who adds one to make the UI readable fails, correctly.
+
+**Check `proxy-up` in the sandbox before the day.** The helper lives in the Instruqt preset, not in
+this repo, so nothing here can fix it. If it prints
+
+```
+Incorrect Usage: flag provided but not defined: -config
+```
+
+it is invoking the image without the `serve` subcommand. The container entrypoint is the bare
+`proxy` binary and `--config` is defined on `proxy serve`, so the command has to end
+`temporalio/temporal-proxy:latest serve --config /config.yaml`. `labs/proxy/README.md` carries the
+correct form. The error message is misleading — it reads like a renamed flag rather than a missing
+subcommand — so nobody will guess it.
+
+The next failure after that one is subtler and was in this repo, not the preset: with `proxy-up`
+running under `docker run -p 7233:7233`, the gateway has to bind **`0.0.0.0:7233`** inside the
+container. `labs/proxy/config.yaml` said `127.0.0.1:7233`, copied from upstream's example, which is
+correct only when the binary runs natively. Docker forwards the published port to the container's
+eth0, nothing listens there, and the worker dies with `get_system_info call error after connection:
+... connection closed` — which reads like a bad API key. Fixed in `config.yaml`; the preset mounts
+that file from the workshop repo, so a preset rebuild picks it up with no change to `proxy-up`.
+Consider narrowing the publish to `-p 127.0.0.1:7233:7233` there while you are in it.
 
 **Session 5** — SDK metrics into a local Prometheus and Grafana, all in the sandbox. The dashboard is
 provisioned already, so the lab is about reading it rather than building panels.
@@ -274,196 +282,50 @@ Say that out loud; the page says it too.
 
 ---
 
-## Injecting the elevated key into Instruqt
+## Retired: custom roles and the elevated key
 
-Lab 2's Terraform runs two resources as a shared service account, and that account's key has to
-reach the sandbox. There are two ways in; use the second only while the first is unavailable.
+Kept as a decision record. Nothing here is live, and no session needs any of it.
 
-### Preferred: an Instruqt secret
-
-Needs team-admin rights on Instruqt. `--description` is **required** — without it the CLI stops
-with `[ERROR] no description specified`.
-
-```bash
-instruqt secrets create WORKSHOP_ELEVATED_API_KEY <token> \
-  --description "Lab 2 elevated Terraform key (workshop-terraform service account)" \
-  --team temporal
-```
-
-Then reference it from the preset, under the VM:
-
-```yaml
-  secrets:
-  - name: WORKSHOP_ELEVATED_API_KEY
-```
-
-A `secrets:` entry only *resolves* a name that already exists in team settings — it does not create
-one. Skip the create and the sandbox builds happily with the variable empty, and the failure
-surfaces at Lab 2's `terraform apply` as a 401, an hour after anyone could have caught it.
-
-To keep the token out of argv, where `ps` can read it and your shell history keeps it:
-
-```bash
-printf '%s' '<token>' > /tmp/k && chmod 600 /tmp/k
-instruqt secrets create WORKSHOP_ELEVATED_API_KEY --data-file /tmp/k \
-  --description "Lab 2 elevated Terraform key" --team temporal
-rm -f /tmp/k
-```
-
-### Fallback: the preset environment block
-
-**This is what the preset ships today**, because creating a team secret needs admin rights we do
-not have. The value goes in `environment:` in
-`preset/temporal-cloud-platform-workshop/config.yml`:
-
-```yaml
-  environment:
-    WORKSHOP_ELEVATED_API_KEY: "<token>"
-```
-
-It works identically — the setup script reads the same variable either way. What it costs:
-
-- Instruqt prints environment values in the sandbox debug log and shows them to anyone with access
-  to the track. A secret is masked; this is not.
-- The preset directory is not in git today. The moment it is, the key is in history permanently,
-  and rotating it does not remove it from there.
-- The service account holds account-role **admin** on the training account, so a leaked key is
-  admin until it expires or is deleted.
-
-Students reading it inside the sandbox is *not* part of the cost — Lab 2 hands it to them anyway,
-and they already hold Global Admin for 48 hours. The exposure that matters is everyone outside the
-room.
-
-So **shorten the lifetime to match the engagement** rather than accepting the 30-day default, and
-delete the key afterwards:
-
-```bash
-KEY_DURATION=3d TEMPORAL_API_KEY=<account-owner key> ./scripts/create-role-admin-sa.sh
-# after the workshop
-temporal cloud apikey list --api-key $TEMPORAL_API_KEY | grep SERVICE_ACCOUNT
-temporal cloud apikey delete --key-id <id> --api-key $TEMPORAL_API_KEY --auto-confirm
-```
-
-Move to the secret form as soon as someone with team-admin rights can create it; the only change is
-deleting the `environment:` line and adding the `secrets:` block.
-
-### How it reaches Terraform
-
-Either way, the setup script re-exports it in `~/.bashrc`:
-
-```bash
-export TF_VAR_elevated_api_key=${WORKSHOP_ELEVATED_API_KEY:-}
-```
-
-`TF_VAR_` is how Terraform takes a variable from the environment, and the name is deliberately not
-`TEMPORAL_CLOUD_API_KEY` — that stays the student's own key, so Lab 1's namespace is created by
-them and the Worker authenticates as them.
-
-**Verify before the day**, in a launched sandbox:
-
-```bash
-[ -n "$TF_VAR_elevated_api_key" ] && echo present || echo MISSING
-temporal cloud custom-role list --api-key "$TF_VAR_elevated_api_key"   # expect: the role list
-temporal workflow list --namespace <ns> --api-key "$TF_VAR_elevated_api_key"
-```
-
-The last one **should** fail with `Request unauthorized`. That is the custom-role bug landing on an
-identity that never needed the data plane, which is the whole reason Lab 2 runs through it.
-
-### Rotation
-
-The key expires `KEY_DURATION` after creation. Re-run the script, then update wherever it lives —
-the `environment:` line, or:
-
-```bash
-instruqt secrets update WORKSHOP_ELEVATED_API_KEY <token> \
-  --description "Lab 2 elevated Terraform key" --team temporal
-instruqt secrets list --team temporal
-```
-
-Sandboxes already running keep the old value; new ones pick up the new one.
-
-To find out what you have without the token:
-
-```bash
-temporal cloud apikey list --api-key $TEMPORAL_API_KEY | grep SERVICE_ACCOUNT
-```
-
----
-
-## Custom roles: the options
-
-Session 2's lab is built on Custom Roles, and Custom Roles carry a confirmed bug: **a principal
-holding an account-level custom role loses its data-plane access**. Control plane keeps working, so
-nothing looks wrong until a worker fails to poll. Pick one of these before the day; they are ordered
-by how little they disturb the lab.
+Session 2's lab used to build a hand-written **Custom Role** and attach it to the Worker's service
+account. Both of those are Account Owner permissions, so a Global Admin student could not run their
+own `terraform apply`. Worse, the workaround everyone reaches for first — grant students the
+delegation role — is unusable here: a principal holding an **account-level custom role loses its
+data-plane access** (confirmed bug, control plane unaffected), and Sessions 1, 3, 4, 5 and 6 all run
+workers. Four options were on the table:
 
 | # | Option | Students still create a role? | Risk |
 |---|---|---|---|
-| 1 | Grant for Session 2, revoke after | Yes | Two commands per student, mid-workshop |
+| 1 | Grant the delegation for Session 2, revoke after | Yes | Two commands per student, mid-workshop |
 | 2 | Instructor pre-creates the roles | No — they read and attach one | Low |
-| 3 | Shared elevated key, Lab 2 only | Yes, via a second credential | Low — **chosen** |
-| 4 | Demote to an instructor demo | No | None |
+| 3 | Shared elevated key, Lab 2 only, via an aliased provider | Yes, via a second credential | Low — chosen at the time |
+| 4 | Demote the role to an instructor demo | No | None |
 
-**1. Time-box the grant.** Covered in Prep work above. Works because Session 2 is the only session
-that never touches the data plane. Verify with `workshop-check` before Session 3.
+Option 3 shipped: `scripts/create-role-admin-sa.sh` created a `workshop-terraform` service account
+holding the delegation role from `scripts/custom-role-delegation.json`, Instruqt injected its key as
+`WORKSHOP_ELEVATED_API_KEY`, `labs/providers.tf` exposed it as an aliased `temporalcloud.elevated`
+provider, and exactly two resources in `lab2.tf` named that alias. The service account absorbed the
+data-plane bug and did not care, because it never polled a task queue.
 
-**2. Pre-create the roles.** As Account Owner, create one `<prefix><slug>-worker-role` per attendee
-ahead of time. Session 2 then drops the `temporalcloud_custom_role` resource and references the
-existing role by id. Students still build the service account, attach the role, grant namespace
-`write` and issue the key — four of the six checkpoints are untouched. `custom-role-exists` and
-`custom-role-scoped` grade the role either way, since they read the account rather than the state
-file.
+What replaced it is **option 5, which nobody had listed**: don't create a custom role at all. A
+[namespace-scoped service account](https://docs.temporal.io/cloud/manage-access/service-accounts#scoped)
+— `namespace_scoped_access` with `write`, no account-wide access block — is both the lower-privilege
+identity *and* creatable by a Global Admin directly, because Namespace Admins may manage them and
+Global Admin implicitly holds Namespace Admin everywhere. The custom role was granting one action
+(`cloud.namespace.get`) that a Worker never calls, so removing it cost the lab nothing and removed a
+second credential, an aliased provider, a Pre-release dependency, a 25-per-account cap and an open
+bug.
 
-**3. Shared elevated key, Lab 2 only.** *(chosen)* One service account holds the delegation role
-and its own API key, created by `scripts/create-role-admin-sa.sh`. Instruqt injects it as
-`WORKSHOP_ELEVATED_API_KEY` — a name of its own, so it never shadows the student's key.
-`TEMPORAL_API_KEY` and `TEMPORAL_CLOUD_API_KEY` both stay the student's, which keeps Lab 1's
-namespace attributable to them and the Worker authenticating as them. Lab 2 elevates explicitly,
-either for one invocation:
+Two lessons kept from the old design, because they were never really about custom roles: the account
+role floor is `Read` and nothing lowers it, and custom roles are additive so they can only ever grant
+more. Both are taught in the new lab, and quiz question 2.1 still covers the second.
 
-```bash
-TEMPORAL_CLOUD_API_KEY=$WORKSHOP_ELEVATED_API_KEY terraform apply
-```
-
-or per-resource with an aliased second provider block on `temporalcloud_custom_role` **and**
-`temporalcloud_service_account` — both need it, because attaching the role to the service account
-is itself `cloud.customrole.assign`. All six labs share one Terraform directory and state, so the
-per-invocation form runs *everything* in that apply as the service account; the alias form is the
-only one that truly scopes elevation to two resources.
-
-The service account loses its own data-plane access to the bug and does not care, because it never
-polls. Making a student switch credentials to perform the privileged step also happens to
-demonstrate the exact separation Session 2 is teaching.
-
-**4. Demote to a demo.** Remove the `custom-role-exists` and `custom-role-scoped` checkpoints and
-run the custom role on the projector. The session still teaches least privilege through the
-predefined-role floor, the namespace-scoped grant and the service-account-owned key. Reach for this
-if the bug is still open on the morning and you want zero moving parts.
-
-### Untested, and it matters
-
-Every option above assumes the bug hits **users**. The lab also attaches the custom role to a
-**service account** (`account_access_custom_roles` in the lab 2 snippet) which separately holds
-`write` on the student's namespace — and that service account's key is what the Worker uses from
-Session 2 onward. If the bug applies to service accounts too, the Worker loses its namespace grant
-and Sessions 3 to 6 fail to poll for everyone, whichever option you picked.
-
-Test it once, before the day:
-
-```bash
-# As Account Owner, against a throwaway namespace
-temporal cloud service-account create --name bugtest --account-role read \
-  --namespace-permission <ns>=write --api-key $TEMPORAL_API_KEY
-temporal cloud service-account set-custom-roles --service-account-id <id> \
-  --custom-role <ROLE_ID> --api-key $TEMPORAL_API_KEY
-# Issue a key for it, then:
-temporal workflow list --namespace <ns> --address <ns>.tmprl.cloud:7233 --api-key <SA_KEY>
-```
-
-If that returns `Request unauthorized`, drop `account_access_custom_roles` from the lab 2 snippet —
-the service account keeps its predefined `read` floor plus the namespace grant, which is all the
-Worker needs — and teach the attachment as a diagram rather than as applied Terraform.
+If you ever need the elevated identity back for something else, the script and the role spec still
+work. The role spec needs **two** permission blocks, because the
+[permissions reference](https://docs.temporal.io/cloud/manage-access/permissions-reference#custom-role-permissions)
+has two tables: `cloud.customrole.assign`, `.create` and `.list` are scoped to `accounts`, while
+`.get`, `.update` and `.delete` are scoped to the `custom-roles` resource type. Mixing them into one
+account-scoped block is rejected outright with
+`InvalidArgument desc = invalid action: cloud.customrole.update for resource type: accounts`.
 
 ---
 
