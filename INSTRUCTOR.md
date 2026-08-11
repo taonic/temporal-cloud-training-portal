@@ -121,7 +121,10 @@ These are the two that can kill a workshop date, because someone else has to act
 - [ ] Flip `SWEEPER_MODE=live` and redeploy. **Do not skip the dry run** — this is auto-delete
       against an account you've said is not disposable.
 - [ ] Narrow `PORTAL_ALLOWED_EMAIL_DOMAINS` from `*` to the attendees' real domain. With `*`, the
-      only thing between the internet and Global Admin on `bvmon` is a six-character link.
+      only thing between the internet and Global Admin on `bvmon` is a six-character link. If you
+      must leave it at `*` — mixed-employer cohort, unknown attendee list — at least set
+      `PORTAL_BLOCKED_EMAIL_DOMAINS=gmail.com,outlook.com,yahoo.com,hotmail.com,icloud.com` so a
+      leaked link cannot be redeemed with a throwaway consumer address.
 - [ ] Walk Session 1 end-to-end yourself with a real address. It costs 10 minutes and it is the only
       way to find out the region id is wrong.
 
@@ -171,7 +174,7 @@ Ordered by how likely they are to bite you.
 | 2 | **25 custom roles** per account, no documented auto-raise | Session 2 caps your cohort around 20 | Preflight reports headroom; beyond ~20, pre-create one shared role |
 | 3 | **Custom Roles are Pre-release** | Session 2's headline checkpoints ungradeable if not enabled | Verify with preflight *now* |
 | 4 | **Link rotates at midnight `Australia/Sydney`** | Students lose portal access on day 2 while still holding Cloud access for 48h | Re-paste the new link on day two. Accepted trade-off |
-| 5 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop |
+| 5 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop; failing that, set `PORTAL_BLOCKED_EMAIL_DOMAINS` to the consumer mail providers |
 | 6 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
 | 7 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
 | 8 | **Session 5 is nearly unverifiable** | SDK metrics and Grafana live in the student's sandbox; the portal can only confirm a worker polled and workflows ran | Walk the room and look at screens |

@@ -14,47 +14,118 @@ export const session1: SessionDef = {
   exitCheck: 'Namespaces exist in IaC; region set to Azure Australia East.',
   labTitle: 'Provision a namespace with Terraform',
   labMinutes: 15,
-  needsWorker: true,
+  /**
+   * No `needsWorker`, despite the stretch goal running labs/worker. That flag
+   * renders the Connection details card, which is another filled-in
+   * `workshop-creds` line — and this session's lab now sets the credentials
+   * itself, three steps in. The card is the right thing on Sessions 3-6, where
+   * the values were established a session ago and the page needs to restate
+   * them; here it would be the same command twice on one screen.
+   */
 
-  prerequisites: (ctx) => [
-    {
-      name: 'Run workshop-creds first — nothing works before it',
-      why:
-        'The sandbox does not know who you are. It needs three values, and two of them are yours ' +
-        `alone. **Address** — \`${ctx.namespaceId}.tmprl.cloud:7233\`. **Namespace** — ` +
-        `\`${ctx.namespaceId}\`, where the \`.${ctx.accountId}\` account suffix is part of the name; ` +
-        'dropping it fails with an authorization error that reads exactly like a bad key, and is the ' +
-        'most common way to lose ten minutes here. **API key** — the one you create in step 1 below, ' +
-        'shown once and never again. Paste the command below with your key in place of the ' +
-        'placeholder, or run `workshop-creds` with no arguments to be prompted for all three (the ' +
-        'key is not echoed). From those it writes four variables to the two places that read them: ' +
-        'your shell (`TEMPORAL_API_KEY` for both CLIs, `TEMPORAL_CLOUD_API_KEY` for the Terraform ' +
-        'provider — two names, one key) and `labs/worker/.env` for the C# worker.',
-      install:
-        `workshop-creds ${ctx.namespaceId}.tmprl.cloud:7233 ${ctx.namespaceId} <YOUR-API-KEY>\n` +
-        'source ~/.workshop-env',
-    },
-    {
-      name: 'Then workshop-check — before you write any Terraform',
-      why: 'Probes the tools, the outbound gRPC on 7233 that every lab depends on, and whether your key reaches the Cloud Ops API. Green here means a failure later is your Terraform, not your setup. Expect one `warn`: your namespace does not exist yet, because `terraform apply` is what creates it. That line turns green when you re-run this after the lab; everything else should be green now.',
-      install: 'workshop-check',
-    },
-    {
-      name: 'Everything else is already installed',
-      why: 'The Temporal CLI and its `cloud` extension, Terraform, .NET 8 and Docker are all in the sandbox at the right version, and `terraform init` and `dotnet build` have already run. Work in the Terminal and Editor tabs — not on your laptop, which needs nothing installed on it. `workshop-help` reprints the command list.',
-      install: 'workshop-help',
-    },
-  ],
-
-  labSteps: [
-    'Create an API Key for yourself in the Cloud UI (Settings → API Keys). **Copy it into your password manager now** — Temporal shows it once and there is no way to read it back. Everything you do for the next two days authenticates with this key.',
-    'In the sandbox Terminal tab, run `workshop-creds`. It asks for three values: the **address** (`<namespace>.<account>.tmprl.cloud:7233`), the **namespace** (`<namespace>.<account>` — account suffix included) and the **API key** from step 1. The Connection details block further down this page has the first two filled in with your own namespace, as a command you can paste whole. It sets `TEMPORAL_API_KEY` for the `temporal` CLIs and `TEMPORAL_CLOUD_API_KEY` for the Terraform provider — two names, one key — and writes `labs/worker/.env` for the C# worker. It writes a file rather than exporting into one shell on purpose: later labs run three or four terminals at once, and a value set in only one of them is a confusing way to lose an afternoon.',
-    'Run `workshop-check`. Tools, outbound 7233 and the Cloud Ops API should all be green before you write any Terraform. **Your namespace will show a `warn` saying it does not exist yet — that is correct at this point**, because the `terraform apply` below is what creates it. Re-run `workshop-check` after the apply and that line goes green too.',
-    'Run `labs` to reach `/workspace/workshop/labs`. `terraform init` is already done and the provider and version pin are set up — you write the resources.',
-    'Put the configuration below into `labs/lab1.tf`, then run `terraform plan` and read it before applying.',
-    'Run `terraform apply`.',
-    'Hit "Re-check" below. Every objective checkpoint should go green within a few seconds of apply completing.',
-  ],
+  /**
+   * Setup lives in the lab, not in a Prerequisites block above it.
+   *
+   * It used to be both: the block described `workshop-creds` and `workshop-check`
+   * with the student's real address filled in, and then steps 2 and 3 described
+   * the same two commands again in prose with a pointer to a third copy further
+   * down the page. Three renderings of one instruction is how a student ends up
+   * reading none of them. `labCommands` gets the SnippetContext, so the one
+   * remaining copy is the one with their own namespace already substituted —
+   * which is the whole reason the values were up in the prerequisites.
+   */
+  labCommands: ({ namespaceName, namespaceId, accountId }) => {
+    const address = `${namespaceId}.tmprl.cloud:7233`;
+    return [
+      {
+        label: 'Work in the sandbox — your laptop needs nothing installed on it',
+        command: 'workshop-help',
+        expect:
+          'The command list. The Temporal CLI and its `cloud` extension, Terraform, .NET 8 and ' +
+          'Docker are already here at the right versions, and `terraform init` and `dotnet build` ' +
+          'have already run. Everything below happens in the Terminal and Editor tabs.',
+      },
+      {
+        label: 'Create an API Key for yourself in the Cloud UI — Settings → API Keys',
+        expect:
+          `Name it \`${namespaceName}-admin\` — the key list is account-wide, so a name that ` +
+          'identifies you is what makes yours findable among two dozen others. **That list is ' +
+          'everyone\'s keys, and you are a Global Admin: do not delete a key that is not yours.** ' +
+          'Deleting someone else\'s ends their workshop, and one of the keys in there belongs to ' +
+          'the identity this portal grades with — deleting that one ends everybody\'s. Your own ' +
+          'key is shown **once**, with no way to read it back: copy it into your password manager ' +
+          'before you leave the page. Everything you do for the next two days authenticates with ' +
+          'it, and the only recovery is creating another one.',
+        grades: 'api-key-created',
+      },
+      {
+        label: 'Tell the sandbox who you are — three values, two already filled in below',
+        command:
+          `workshop-creds ${address} ${namespaceId} <YOUR-API-KEY>\n` +
+          'source ~/.workshop-env\n' +
+          '\n' +
+          '# address    the namespace id + .tmprl.cloud:7233\n' +
+          `# namespace  ${namespaceId} — the .${accountId} account suffix is PART OF THE NAME.\n` +
+          '#            Dropping it fails with an authorization error that reads exactly\n' +
+          '#            like a bad key, and is the most common way to lose ten minutes here.\n' +
+          '# api key    the one you just created. Run `workshop-creds` bare to be prompted\n' +
+          '#            for all three instead — the key is not echoed.',
+        expect:
+          'Four variables written to the two places that read them: your shell ' +
+          '(`TEMPORAL_API_KEY` for both CLIs, `TEMPORAL_CLOUD_API_KEY` for the Terraform ' +
+          'provider — two names, one key) and `labs/worker/.env` for the C# worker. It writes a ' +
+          'file rather than exporting into one shell on purpose: later labs run three or four ' +
+          'terminals at once, and a value set in only one of them is a confusing way to lose an ' +
+          'afternoon.',
+      },
+      {
+        label: 'Prove the setup before you write any Terraform',
+        command: 'workshop-check',
+        expect:
+          'Tools, outbound gRPC on 7233 and the Cloud Ops API all green. **Your namespace will ' +
+          'show a `warn` saying it does not exist yet — that is correct at this point**, because ' +
+          'the `terraform apply` below is what creates it. Everything else should be green now; ' +
+          're-run this after the apply and that line goes green too. Green here means a later ' +
+          'failure is your Terraform, not your setup.',
+      },
+      {
+        label: 'Go to the Terraform workspace',
+        command: 'labs',
+        expect:
+          '`/workspace/workshop/labs`. `terraform init` is done and the provider and version pin ' +
+          'are already set up — you write the resources.',
+      },
+      {
+        label: 'Write the resources — this configuration goes into labs/lab1.tf',
+        snippet: true,
+        expect:
+          'A file with two resources and one output. Type it rather than pasting it if you have ' +
+          'the time; the arguments are the lesson.',
+      },
+      {
+        label: 'Read the plan before you change anything',
+        command: 'terraform plan',
+        expect:
+          'Two resources to add and one output. Read it — an unread plan is the habit this session ' +
+          'is trying to build against, and it is the last point at which a wrong region costs you ' +
+          'nothing.',
+      },
+      {
+        label: 'Create the namespace',
+        command: 'terraform apply',
+        expect:
+          'Apply completes and the `namespace_endpoint` output prints. Provisioning takes a few ' +
+          'seconds longer than the apply does.',
+        grades: 'namespace-exists',
+      },
+      {
+        label: 'Hit "Re-check" below',
+        expect:
+          'Every objective checkpoint green within a few seconds of the apply completing. If the ' +
+          'region or retention check is red, fix the argument in `labs/lab1.tf` and apply again.',
+      },
+    ];
+  },
 
   references: [
     {
@@ -168,11 +239,19 @@ output "namespace_endpoint" {
     stretch: {
       title: 'Stretch: actually run something',
       body:
-        'The starter worker in labs/worker is a C# worker and a one-activity workflow. Point it at ' +
-        'your namespace and run it — that is the difference between "provisioned" and "working". ' +
-        'Note the worker must be running before you start the workflow; with no worker polling, the ' +
-        'workflow sits in schedule-to-start and goes nowhere, which is itself worth seeing once.',
-      command: `cd labs/worker\n\ndotnet run -- worker      # terminal 1\ndotnet run -- start       # terminal 2 \n# now run temporal workflow list command above or UI to see the workflow complete`,
+        'The starter worker in labs/worker is a C# worker and a one-activity workflow. It reads ' +
+        '`labs/worker/.env`, which `workshop-creds` already wrote in the lab, so there is nothing ' +
+        'to configure — run it and it is pointed at your namespace. That is the difference between ' +
+        '"provisioned" and "working". Note the worker must be running before you start the ' +
+        'workflow; with no worker polling, the workflow sits in schedule-to-start and goes ' +
+        'nowhere, which is itself worth seeing once. Every mode also runs against a local dev ' +
+        'server (`dev-server-up`, then `dotnet run -- worker --local`) — but stop it with ' +
+        '`dev-server-down` before Session 4, which wants port 7233 for the proxy.',
+      command: `cd labs/worker\n\ndotnet run -- worker      # terminal 1\ndotnet run -- start       # terminal 2`,
+      link: {
+        label: `Watch it land in the Cloud UI — Workflows in ${namespaceId}`,
+        url: `https://cloud.temporal.io/namespaces/${namespaceId}/workflows`,
+      },
     },
   }),
 

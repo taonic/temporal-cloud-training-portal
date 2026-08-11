@@ -24,7 +24,7 @@ import {
   type CloudUser,
 } from '../src/cloud/types';
 import { getTemporalClient } from '../src/temporal/client';
-import { allowsAnyDomain, inviteUrl, nextRotationAt } from '../src/invite/link';
+import { allowsAnyDomain, domainMatches, inviteUrl, nextRotationAt } from '../src/invite/link';
 
 let failures = 0;
 
@@ -182,6 +182,29 @@ async function main() {
     );
   } else {
     ok(`restricted to ${cfg.PORTAL_ALLOWED_EMAIL_DOMAINS.join(', ')}`);
+  }
+
+  console.log(`\nEmail denylist`);
+  if (cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.length === 0) {
+    skip('PORTAL_BLOCKED_EMAIL_DOMAINS is empty — nothing is blocked');
+  } else {
+    ok(`blocking ${cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.join(', ')}`);
+    if (cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.includes('*')) {
+      bad('the denylist contains "*", which blocks every address — no invitation can succeed');
+    }
+    // A domain on both lists is rejected: the denylist is checked first and
+    // wins. Silently, if nobody says so before the workshop starts.
+    const shadowed = cfg.PORTAL_ALLOWED_EMAIL_DOMAINS.filter(
+      (allowed) =>
+        allowed !== '*' &&
+        cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.some((blocked) => domainMatches(allowed, blocked)),
+    );
+    if (shadowed.length > 0) {
+      bad(
+        `${shadowed.join(', ')} appears on the allowlist but is blocked by the denylist — ` +
+          `the denylist wins, so those attendees will be rejected`,
+      );
+    }
   }
 
   console.log(`\nSweeper`);

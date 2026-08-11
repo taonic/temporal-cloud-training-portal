@@ -29,7 +29,11 @@ export default async function Page({
       subtitle={`Enter your work email and Temporal Cloud will send you an invitation to the ${cfg.TRAINING_ACCOUNT_ID} account as a Global Admin. Access is removed automatically after ${hours} hours.`}
       aside={<Badge tone="info">{`${hours}h access`}</Badge>}
     >
-      <InviteForm token={token} allowedDomains={cfg.PORTAL_ALLOWED_EMAIL_DOMAINS} />
+      <InviteForm
+        token={token}
+        allowedDomains={cfg.PORTAL_ALLOWED_EMAIL_DOMAINS}
+        blockedDomains={cfg.PORTAL_BLOCKED_EMAIL_DOMAINS}
+      />
 
       <div className="mt-6 space-y-3">
         <Callout tone="warn">

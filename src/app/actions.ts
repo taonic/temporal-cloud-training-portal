@@ -26,6 +26,8 @@ export async function requestAccess(
   if (!check.ok) {
     const messages: Record<typeof check.reason, string> = {
       malformed: "That doesn't look like an email address.",
+      'domain-blocked':
+        'That email domain is blocked for this workshop. Please use your work email address.',
       'domain-not-allowed': 'That email domain is not on the allow list for this workshop.',
       'no-domains-configured':
         'No email domains are configured, so nobody can be invited. Grab your instructor — ' +

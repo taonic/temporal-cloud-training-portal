@@ -13,7 +13,15 @@ function Submit() {
   );
 }
 
-export function InviteForm({ token, allowedDomains }: { token: string; allowedDomains: string[] }) {
+export function InviteForm({
+  token,
+  allowedDomains,
+  blockedDomains,
+}: {
+  token: string;
+  allowedDomains: string[];
+  blockedDomains: string[];
+}) {
   const [state, action] = useActionState<InviteFormState, FormData>(requestAccess, {
     status: 'idle',
   });
@@ -38,6 +46,12 @@ export function InviteForm({ token, allowedDomains }: { token: string; allowedDo
       {allowedDomains.length > 0 && !allowedDomains.includes('*') && (
         <p className="mt-2 text-xs text-content-subtle">
           Limited to {allowedDomains.map((d) => `@${d}`).join(', ')}.
+        </p>
+      )}
+
+      {blockedDomains.length > 0 && (
+        <p className="mt-2 text-xs text-content-subtle">
+          {blockedDomains.map((d) => `@${d}`).join(', ')} cannot be used — enter your work address.
         </p>
       )}
 

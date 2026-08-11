@@ -79,6 +79,7 @@ Non-secret, version-controlled, already populated in `fly.toml`. Change them the
 | `PORTAL_BASE_URL` | `https://temporal-cloud-training-portal.fly.dev` | Fallback only. `/instructor` derives the invite link from the request's `x-forwarded-host` / `x-forwarded-proto`, so it is correct on Fly without this being set. Used by `pnpm ops:preflight`, which has no request to read. |
 | `PORTAL_LINK_TIMEZONE` | `Australia/Sydney` | Midnight here is the rotation boundary — 02:00 NZ, outside workshop hours. |
 | `PORTAL_ALLOWED_EMAIL_DOMAINS` | `example.com` | **The actual access control.** Patterns: `example.com` (exact), `*.example.com` (subdomains only), `*` (any domain). Empty **denies everything** — it fails closed. Setting `*` means the rotating link and the seat cap are your only controls; the portal warns about this on both the invite page and `/instructor`. |
+| `PORTAL_BLOCKED_EMAIL_DOMAINS` | *(empty)* | Domains that may never be invited, whatever the allowlist says — same patterns, checked first, wins outright. Empty blocks nothing. Use it to keep consumer mail out while the allowlist stays `*`, e.g. `gmail.com,outlook.com,yahoo.com`. `*` here rejects everybody; `pnpm ops:preflight` fails on that, and on any domain that appears on both lists. |
 | `PORTAL_DAILY_SEAT_CAP` | `25` | Invitations per rotation day. |
 | `ACCESS_TTL_HOURS` | `48` | How long a student holds Global Admin. |
 | `TRAINING_ACCOUNT_ID` | `bvmon` | Display only; the key decides which account is really touched. |

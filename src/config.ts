@@ -41,6 +41,16 @@ const schema = z.object({
    * Empty denies everything — allowing everyone must be spelled `*`.
    */
   PORTAL_ALLOWED_EMAIL_DOMAINS: z.string().default('').transform(csv),
+  /**
+   * Who may never receive an invitation, whatever the allowlist says. Same
+   * comma-separated pattern grammar, checked first and wins outright.
+   *
+   * This exists for the `PORTAL_ALLOWED_EMAIL_DOMAINS=*` case that a workshop
+   * usually runs in: keeping consumer mail providers out is a short denylist,
+   * whereas expressing it as an allowlist means enumerating every attendee's
+   * employer. Empty is the normal value — it blocks nothing.
+   */
+  PORTAL_BLOCKED_EMAIL_DOMAINS: z.string().default('').transform(csv),
   /** Maximum invitations issued per rotation day. */
   PORTAL_DAILY_SEAT_CAP: z.coerce.number().int().positive().default(25),
   /** Bearer token for the instructor-only control-plane mirror. */

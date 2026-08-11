@@ -97,22 +97,28 @@ export function nextRotationAt(at: Date = new Date(), timeZone = config().PORTAL
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export type EmailRejection = 'malformed' | 'domain-not-allowed' | 'no-domains-configured';
+export type EmailRejection =
+  | 'malformed'
+  | 'domain-blocked'
+  | 'domain-not-allowed'
+  | 'no-domains-configured';
 
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
 /**
- * Pattern grammar for PORTAL_ALLOWED_EMAIL_DOMAINS:
+ * Pattern grammar, shared by PORTAL_ALLOWED_EMAIL_DOMAINS and
+ * PORTAL_BLOCKED_EMAIL_DOMAINS:
  *
- *   *                any domain — no restriction at all
+ *   *                any domain
  *   example.com      that domain exactly
  *   *.example.com    any subdomain of it, but NOT the bare domain
  *
- * An empty list denies everything. Allowing everyone has to be spelled `*`,
- * because "the operator left it blank" and "the operator meant to let the whole
- * internet in" should not be the same configuration.
+ * On the allowlist an empty list denies everything: allowing everyone has to be
+ * spelled `*`, because "the operator left it blank" and "the operator meant to
+ * let the whole internet in" should not be the same configuration. On the
+ * denylist the polarity flips — empty blocks nothing, which is the normal value.
  */
 export function domainMatches(domain: string, pattern: string): boolean {
   if (pattern === '*') return true;
@@ -136,10 +142,19 @@ export function checkEmail(
   const email = normalizeEmail(raw);
   if (!EMAIL_RE.test(email)) return { ok: false, reason: 'malformed' };
 
-  const allowed = config().PORTAL_ALLOWED_EMAIL_DOMAINS;
+  const cfg = config();
+  const domain = email.slice(email.lastIndexOf('@') + 1);
+
+  // Denylist first, and it wins: an operator who blocks a domain that the
+  // allowlist also matches means the block, and `*` on the allowlist is the
+  // configuration the denylist exists to narrow.
+  if (cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.some((pattern) => domainMatches(domain, pattern))) {
+    return { ok: false, reason: 'domain-blocked' };
+  }
+
+  const allowed = cfg.PORTAL_ALLOWED_EMAIL_DOMAINS;
   if (allowed.length === 0) return { ok: false, reason: 'no-domains-configured' };
 
-  const domain = email.slice(email.lastIndexOf('@') + 1);
   const permitted = allowed.some((pattern) => domainMatches(domain, pattern));
   return permitted ? { ok: true, email } : { ok: false, reason: 'domain-not-allowed' };
 }

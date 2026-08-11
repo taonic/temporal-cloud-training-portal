@@ -46,7 +46,11 @@ export default async function InstructorPage({
           <Callout tone="warn">
             <strong className="font-semibold">Domain allowlist is wide open (<code>*</code>).</strong>{' '}
             Anyone who obtains today&apos;s link can grant themselves Global Admin on{' '}
-            {cfg.TRAINING_ACCOUNT_ID} with any address. The seat cap ({cfg.PORTAL_DAILY_SEAT_CAP}
+            {cfg.TRAINING_ACCOUNT_ID} with any address
+            {cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.length > 0
+              ? ` except ${cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.join(', ')}`
+              : ''}
+            . The seat cap ({cfg.PORTAL_DAILY_SEAT_CAP}
             /day) is the only remaining limit. Rotate <code>PORTAL_LINK_SECRET</code> to kill every
             outstanding link at once.
           </Callout>

@@ -129,13 +129,31 @@ export interface LabStep {
   expect?: string;
   /** Checkpoint id this step satisfies. */
   grades?: string;
+  /**
+   * Renders the session's `snippet` inside this step rather than after the whole
+   * list. Set it on the step that asks for the file: a student following step 6
+   * should not have to scroll past steps 7 and 8 to find the configuration
+   * step 6 is talking about. At most one step per session claims it.
+   */
+  snippet?: boolean;
 }
 
 export interface UseSection {
   intro: string;
   steps: UseStep[];
   /** Optional extra credit for people who finish the lab early. */
-  stretch?: { title: string; body: string; command?: string };
+  stretch?: {
+    title: string;
+    body: string;
+    command?: string;
+    /**
+     * Where to go and look at what just happened. Deep-linked into the
+     * student's own namespace — `RichText` renders no anchors, so a URL in
+     * `body` would be unclickable prose, and the Cloud UI's namespace switcher
+     * is a poor substitute for landing on the right page.
+     */
+    link?: { label: string; url: string };
+  };
 }
 
 /**
@@ -186,18 +204,22 @@ export interface SessionDef {
   labMinutes: number;
   /**
    * Tools this session needs that no earlier session did. The function form gets
-   * the student's own names — Session 1's first prerequisite is `workshop-creds`,
-   * and a student typing their address from a format string rather than reading
-   * their real one is the mistake this whole block exists to prevent.
+   * the student's own names, for a prerequisite that has to quote one.
+   *
+   * Setup a session's own lab performs — `workshop-creds`, `workshop-check` —
+   * does not belong here. Session 1 carried both in this block *and* in its
+   * steps, and a student who reads an instruction twice reads it once.
    */
   prerequisites?: Prerequisite[] | ((ctx: SnippetContext) => Prerequisite[]);
   /** Docs to keep open during the lab. */
   references?: ReferenceGroup[];
   /**
    * True when the lab runs `labs/worker`, which needs TEMPORAL_ADDRESS /
-   * _NAMESPACE / _API_KEY. Only those sessions show the Connection details
-   * block — Session 2 drives the `temporal` CLI instead and would just be
-   * carrying an extra card nobody needs.
+   * _NAMESPACE / _API_KEY, and the values were established in an earlier
+   * session. Only those sessions show the Connection details block — Session 2
+   * drives the `temporal` CLI instead and would just be carrying an extra card
+   * nobody needs, and Session 1's lab sets the credentials itself, so the card
+   * would repeat a command already on the same screen.
    */
   needsWorker?: boolean;
   /** Shown above the steps when there is something they must know first. */

@@ -129,6 +129,10 @@ export function RichText({ children }: { children: string }) {
  * never passed — and the Lab, where a step that satisfies a checkpoint says so.
  * `command` and `expect` are optional because a Lab step can be a decision
  * ("write down the rollback you would run") rather than something to type.
+ *
+ * `snippet` is the step's own artifact — the file the step is asking for. It
+ * renders above `command` so a step can hand over the configuration and then
+ * the command that consumes it, in that order.
  */
 export function CommandStep({
   index,
@@ -136,6 +140,7 @@ export function CommandStep({
   command,
   expect,
   grades,
+  snippet,
 }: {
   index: number;
   label: string;
@@ -143,6 +148,7 @@ export function CommandStep({
   expect?: string;
   /** Human-readable title of the checkpoint this step satisfies. */
   grades?: string;
+  snippet?: ReactNode;
 }) {
   return (
     <li className="border-l-2 border-line-subtle/60 pl-4">
@@ -159,6 +165,7 @@ export function CommandStep({
           </span>
         )}
       </div>
+      {snippet && <div className={command ? 'mb-3' : undefined}>{snippet}</div>}
       {command && <CodeBlock>{command}</CodeBlock>}
       {expect && (
         <p className="mt-2 text-[13px] leading-6 text-content-subtle">

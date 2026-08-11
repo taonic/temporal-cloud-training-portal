@@ -123,10 +123,11 @@ export default async function SessionPage({
   const use = snippetContext && session.use ? session.use(snippetContext) : undefined;
 
   /**
-   * Prerequisites are the one personalised block that has to render even when
-   * the link carries no email — they are what a student reads *before* they are
-   * set up. So the function form falls back to placeholders rather than
-   * vanishing, which is what gating it on `snippetContext` would do.
+   * Prerequisites are the one personalised block that can render before the
+   * lab does — they are what a student reads *before* they are set up, and the
+   * lab body is withheld until the link carries an email. So the function form
+   * falls back to placeholders rather than vanishing, which is what gating it
+   * on `snippetContext` would do.
    */
   const prerequisites =
     typeof session.prerequisites === 'function'
@@ -279,6 +280,11 @@ export default async function SessionPage({
                       command={step.command}
                       expect={step.expect}
                       grades={checkpointTitle(step.grades)}
+                      snippet={
+                        step.snippet && snippet ? (
+                          <Code lang={session.snippetLang}>{snippet}</Code>
+                        ) : undefined
+                      }
                     />
                   ))}
                 </ol>
@@ -297,7 +303,10 @@ export default async function SessionPage({
                 </ol>
               )}
 
-              {snippet && <Code lang={session.snippetLang}>{snippet}</Code>}
+              {/* Only when no step claimed it — otherwise it renders twice. */}
+              {snippet && !labCommands?.some((step) => step.snippet) && (
+                <Code lang={session.snippetLang}>{snippet}</Code>
+              )}
 
               {labRefs.length > 0 && (
                 <div className="mt-5 border-t border-line-subtle/40 pt-5">
@@ -379,6 +388,17 @@ workshop-creds ${snippetContext.namespaceId}.tmprl.cloud:7233 ${snippetContext.n
                   <div className="mt-3">
                     <Code>{use.stretch.command}</Code>
                   </div>
+                )}
+                {use.stretch.link && (
+                  <a
+                    href={use.stretch.link.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-block text-[13px] font-medium text-brand-soft underline
+                               decoration-brand-soft/40 underline-offset-2 hover:decoration-brand-soft"
+                  >
+                    {use.stretch.link.label} ↗
+                  </a>
                 )}
               </div>
             )}

@@ -35,6 +35,10 @@ primary_region = "syd"
   # Empty denies everything. "*" means the rotating link and the seat cap are
   # the only controls on who receives Global Admin.
   PORTAL_ALLOWED_EMAIL_DOMAINS = "*"
+  # Never invited, whatever the allowlist says. Same patterns, checked first,
+  # wins outright. Empty blocks nothing; this is how you narrow the "*" above
+  # without enumerating every attendee's employer.
+  PORTAL_BLOCKED_EMAIL_DOMAINS = ""
   PORTAL_DAILY_SEAT_CAP = "25"
   ACCESS_TTL_HOURS = "48"
 

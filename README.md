@@ -106,6 +106,11 @@ opening the door to everyone has to be spelled `*` deliberately. When it *is* `*
 page and `/instructor` say so in as many words, because at that point the link and the seat cap
 are all that stand between the internet and Global Admin on `bvmon`.
 
+`PORTAL_BLOCKED_EMAIL_DOMAINS` is the denylist: same patterns, checked first, and it wins over the
+allowlist. Empty blocks nothing. It exists for the wildcard case — keeping consumer mail providers
+out (`gmail.com,outlook.com,yahoo.com`) is a three-item list, whereas expressing the same intent as
+an allowlist means enumerating every attendee's employer. It narrows `*`; it does not replace it.
+
 **Global Admin includes user management.** A student can delete other students, and can delete the
 identity that owns the portal's Cloud Ops API key. Nothing in the product prevents this. The
 `opsCanary` workflow detects it; it cannot prevent it. Confirm you hold **Account Owner** on
