@@ -107,6 +107,16 @@ export interface UseStep {
   command: string;
   /** What they should see. For the deny cases, the error IS the lesson. */
   expect: string;
+  /**
+   * Short badge text for a step the rest of the workshop depends on, e.g.
+   * "required by Sessions 3-6".
+   *
+   * This section is labelled *not graded*, which is honest and also an
+   * invitation to skip it — and one step in Session 2 writes the credential
+   * every later session's Worker runs on. A step with a downstream dependency
+   * has to look different from a step that is there to be interesting.
+   */
+  required?: string;
 }
 
 /**

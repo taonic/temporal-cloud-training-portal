@@ -51,7 +51,7 @@ export function InviteForm({
 
       {blockedDomains.length > 0 && (
         <p className="mt-2 text-xs text-content-subtle">
-          {blockedDomains.map((d) => `@${d}`).join(', ')} cannot be used — enter your work address.
+          {blockedDomains.map((d) => `@${d}`).join(', ')} cannot be used — choose a different email.
         </p>
       )}
 

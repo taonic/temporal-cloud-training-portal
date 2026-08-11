@@ -338,6 +338,7 @@ export default async function SessionPage({
                   label={step.label}
                   command={step.command}
                   expect={step.expect}
+                  required={step.required}
                 />
               ))}
             </ol>

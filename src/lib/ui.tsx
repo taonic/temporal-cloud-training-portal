@@ -160,6 +160,7 @@ export function CommandStep({
   command,
   expect,
   grades,
+  required,
   snippet,
   link,
 }: {
@@ -169,6 +170,8 @@ export function CommandStep({
   expect?: string;
   /** Human-readable title of the checkpoint this step satisfies. */
   grades?: string;
+  /** Badge text for an ungraded step that later sessions nonetheless depend on. */
+  required?: string;
   snippet?: ReactNode;
   link?: { label: string; url: string };
 }) {
@@ -184,6 +187,15 @@ export function CommandStep({
             title={`Satisfies the exit check "${grades}"`}
           >
             graded · {grades}
+          </span>
+        )}
+        {required && (
+          <span
+            className="rounded border border-warning-border/40 bg-warning/10 px-1.5 py-0.5 text-[11px]
+                       font-medium text-warning"
+            title="Ungraded, but the rest of the workshop depends on it"
+          >
+            don&apos;t skip · {required}
           </span>
         )}
       </div>
