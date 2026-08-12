@@ -41,7 +41,7 @@ Four values, never in `fly.toml`, never in git:
 
 | Secret | Purpose | If it's wrong |
 |---|---|---|
-| `PORTAL_LINK_SECRET` | HMAC key for the daily invite link. | Every link 404s. Rotating this invalidates all outstanding links instantly — that's the emergency stop. |
+| `PORTAL_LINK_SECRET` | HMAC key the invite link is derived from. | Every link 404s. The link never expires on its own, so changing this value is the *only* thing that invalidates outstanding links — that's the emergency stop. |
 | `PORTAL_INSTRUCTOR_TOKEN` | Guards `/instructor` and `/api/mirror`. | Either you can't reach the mirror, or — if you leak it — every attendee email and account role is exposed. |
 | `CLOUD_OPS_API_KEY` | Admin key on **bvmon**. Invites, revokes, sweeps, grades. | Nothing works and `opsCanary` goes red. |
 | `TEMPORAL_API_KEY` | Connects to **a2dd6**, where the workflows run. | No workflows start; the portal cannot grant or revoke anything. |
@@ -77,10 +77,11 @@ Non-secret, version-controlled, already populated in `fly.toml`. Change them the
 | Variable | Default in `fly.toml` | Notes |
 |---|---|---|
 | `PORTAL_BASE_URL` | `https://temporal-cloud-training-portal.fly.dev` | Fallback only. `/instructor` derives the invite link from the request's `x-forwarded-host` / `x-forwarded-proto`, so it is correct on Fly without this being set. Used by `pnpm ops:preflight`, which has no request to read. |
-| `PORTAL_LINK_TIMEZONE` | `Australia/Sydney` | Midnight here is the rotation boundary — 02:00 NZ, outside workshop hours. |
-| `PORTAL_ALLOWED_EMAIL_DOMAINS` | `example.com` | **The actual access control.** Patterns: `example.com` (exact), `*.example.com` (subdomains only), `*` (any domain). Empty **denies everything** — it fails closed. Setting `*` means the rotating link and the seat cap are your only controls; the portal warns about this on both the invite page and `/instructor`. |
+| `PORTAL_LINK_TIMEZONE` | `Australia/Sydney` | Midnight here resets the daily seat cap — 02:00 NZ, outside workshop hours. The invite link does not rotate. |
+| `PORTAL_LINK_CODE` | *(unset)* | Pins the invite code to a literal instead of deriving it from `PORTAL_LINK_SECRET`. Normally unset. Set it to carry a code already in circulation across a deploy that would otherwise change the link. **While it is set, changing the secret retires nothing** — clear or change this value instead. |
+| `PORTAL_ALLOWED_EMAIL_DOMAINS` | `example.com` | **The actual access control.** Patterns: `example.com` (exact), `*.example.com` (subdomains only), `*` (any domain). Empty **denies everything** — it fails closed. Setting `*` means the invite link and the seat cap are your only controls; the portal warns about this on both the invite page and `/instructor`. |
 | `PORTAL_BLOCKED_EMAIL_DOMAINS` | *(empty)* | Domains that may never be invited, whatever the allowlist says — same patterns, checked first, wins outright. Empty blocks nothing. Use it to keep consumer mail out while the allowlist stays `*`, e.g. `gmail.com,outlook.com,yahoo.com`. `*` here rejects everybody; `pnpm ops:preflight` fails on that, and on any domain that appears on both lists. |
-| `PORTAL_DAILY_SEAT_CAP` | `25` | Invitations per rotation day. |
+| `PORTAL_DAILY_SEAT_CAP` | `25` | Invitations per day, counted in `PORTAL_LINK_TIMEZONE`. |
 | `ACCESS_TTL_HOURS` | `48` | How long a student holds Global Admin. |
 | `TRAINING_ACCOUNT_ID` | `bvmon` | Display only; the key decides which account is really touched. |
 | `CLOUD_OPS_ADDRESS` | `saas-api.tmprl.cloud:443` | |
@@ -127,7 +128,7 @@ curl https://<app>.fly.dev/api/health      # {"ok":true,"registryRunning":true,"
 `registryRunning: false` means the worker has not claimed the singletons — check `fly logs` for a
 Temporal connection error, which is nearly always the regional-vs-namespace address mistake.
 
-Then open `/instructor?t=<PORTAL_INSTRUCTOR_TOKEN>`. You should see today's student link, the
+Then open `/instructor?t=<PORTAL_INSTRUCTOR_TOKEN>`. You should see the student link, the
 canary green with the identity your Cloud Ops key belongs to, and the baseline resource count.
 
 ---
@@ -149,7 +150,15 @@ canary green with the identity your Cloud Ops key belongs to, and the baseline r
 
 **Rotate the invite link immediately.** `fly secrets set PORTAL_LINK_SECRET='...'` — every
 outstanding link dies at once. Existing access is unaffected; the running `invitation` workflows
-still revoke on schedule.
+still revoke on schedule. **If `PORTAL_LINK_CODE` is set, this does nothing to the link** — the code
+is pinned, so clear it in the same breath:
+
+```bash
+fly secrets unset PORTAL_LINK_CODE          # or set it to a fresh code
+```
+
+`pnpm ops:preflight` and `/instructor` both say which of the two is in force, so you are not
+guessing under pressure.
 
 **Rotate the Cloud Ops key** (it expires, and a student with Global Admin can delete the identity
 owning it): `fly secrets set CLOUD_OPS_API_KEY='...'`. The canary goes green again within five
@@ -176,6 +185,6 @@ open windows and an empty sweep, or revoke by hand in the Cloud UI first.
 | `Request unauthorized` from Temporal | Namespace doesn't have API key auth enabled, or the key belongs to the wrong account. |
 | Canary red, `grpc code 16` | `CLOUD_OPS_API_KEY` expired, revoked, or its owning identity was deleted. |
 | Canary red, `grpc code 7` | Key is valid but its role is below `ROLE_ADMIN` on `bvmon`. |
-| Invite form: "link has rotated" right after deploy | `PORTAL_LINK_SECRET` changed, or `PORTAL_BASE_URL` doesn't match the host you're browsing. |
+| Invite form: "that link is not valid" right after deploy | `PORTAL_LINK_SECRET` changed — every outstanding link died with it, which is what it is for. Re-copy the link from `/instructor`. |
 | Checkpoints stuck on "No namespace named…" | Student used a different namespace name, or the region is wrong so `terraform apply` failed. |
 | Health check flapping, machine restarting | Not caused by dependency outages — `/api/health` never fails on those. Look for an actual crash in `fly logs`. |

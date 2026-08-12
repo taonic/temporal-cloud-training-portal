@@ -8,7 +8,7 @@ the first item in it has a **lead time you do not control**.
 
 ## The 30-second mental model
 
-Students open a rotating link, type their email, and Temporal Cloud emails them an invitation to
+Students open the workshop link, type their email, and Temporal Cloud emails them an invitation to
 **`bvmon` as Global Admin**. A Temporal workflow — running in a *different* account (`tao.a2dd6`),
 where students have no reach — holds a 48-hour timer and then deletes them. A sweeper deletes what
 they created.
@@ -96,9 +96,10 @@ and no longer does — it is kept so you know not to go looking for it.
 
 - [ ] Open `/instructor?t=<PORTAL_INSTRUCTOR_TOKEN>`. Check the canary is green and the baseline
       captured recently.
-- [ ] Copy today's link **from `/instructor`**, not from preflight — the instructor page derives it
-      from the URL you're actually on, so it has the right host and port.
-- [ ] Paste it into the room's chat. Project the mirror.
+- [ ] Copy the student link **from `/instructor`**, not from preflight — the instructor page derives
+      it from the URL you're actually on, so it has the right host and port.
+- [ ] Paste it into the room's chat. Project the mirror. The same link works for both days, so
+      there is nothing to re-paste on the morning of day two.
 
 ---
 
@@ -136,7 +137,7 @@ Ordered by how likely they are to bite you.
 |---|---|---|---|
 | 1 | **10 namespaces** default per account | Session 1 fails for everyone past the tenth student | Support ticket, 2 weeks ahead |
 | 2 | **A namespace-scoped service account's namespace is immutable** | A student who scopes Lab 2's service account to the wrong namespace must destroy and recreate it, key included | The portal fills the id in for them; the checkpoint names the namespace it expected |
-| 3 | **Link rotates at midnight `Australia/Sydney`** | Students lose portal access on day 2 while still holding Cloud access for 48h | Re-paste the new link on day two. Accepted trade-off |
+| 3 | **The invite link never expires on its own** | A link projected on day one keeps working for anyone who photographed it, until you change the secret | `fly secrets set PORTAL_LINK_SECRET=...` after the workshop. It replaced nightly rotation, which locked students out on day two while their Cloud access still had 24h left |
 | 4 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop; failing that, set `PORTAL_BLOCKED_EMAIL_DOMAINS` to the consumer mail providers |
 | 5 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
 | 6 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
@@ -159,6 +160,19 @@ with no creation timestamp. **Check the drift list after the workshop** and clea
 Do not tear the app down while access windows are open — you'd strand students as Global Admins on
 `bvmon` with nothing left to revoke them. Wait until `/instructor` shows zero open windows and a
 clean sweep, or revoke by hand in the Cloud UI first.
+
+**Retire the invite link when the workshop ends.** It does not expire on its own any more, so
+anyone who photographed it off the projector can keep requesting seats until you act:
+
+```bash
+fly secrets set PORTAL_LINK_SECRET="$(openssl rand -base64 32)"
+fly secrets unset PORTAL_LINK_CODE     # only if a pinned code is in force
+```
+
+The second line matters: `PORTAL_LINK_CODE` pins the link to a literal and overrides the secret
+entirely, so rotating the secret alone leaves a pinned link working. `/instructor` and
+`pnpm ops:preflight` both tell you which is in force. Every outstanding link dies with it. Access already granted is unaffected — the running
+`invitation` workflows still revoke on their own schedule.
 
 ---
 

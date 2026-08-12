@@ -24,7 +24,13 @@ import {
   type CloudUser,
 } from '../src/cloud/types';
 import { getTemporalClient } from '../src/temporal/client';
-import { allowsAnyDomain, domainMatches, inviteUrl, nextRotationAt } from '../src/invite/link';
+import {
+  allowsAnyDomain,
+  domainMatches,
+  inviteUrl,
+  linkIsPinned,
+  nextSeatResetAt,
+} from '../src/invite/link';
 
 let failures = 0;
 
@@ -170,7 +176,16 @@ async function main() {
   /* -- Portal configuration ---------------------------------------------- */
   console.log(`\nInvite link`);
   ok(inviteUrl());
-  ok(`rotates at ${nextRotationAt().toISOString()} (midnight ${cfg.PORTAL_LINK_TIMEZONE})`);
+  if (linkIsPinned()) {
+    warn(
+      'pinned by PORTAL_LINK_CODE, so it survives a PORTAL_LINK_SECRET change. That is the point ' +
+        'when you are keeping circulated links alive, and it also means rotating the secret retires ' +
+        'nothing — clear or change PORTAL_LINK_CODE to kill this link.',
+    );
+  } else {
+    ok('stable — it changes only when you change PORTAL_LINK_SECRET');
+  }
+  ok(`daily seat cap of ${cfg.PORTAL_DAILY_SEAT_CAP} resets at ${nextSeatResetAt().toISOString()} (midnight ${cfg.PORTAL_LINK_TIMEZONE})`);
   warn(
     'the URL above uses PORTAL_BASE_URL, the no-request fallback. /instructor derives ' +
       'the origin from your browser instead, so copy the link from there — it will have ' +
@@ -182,7 +197,7 @@ async function main() {
     bad('PORTAL_ALLOWED_EMAIL_DOMAINS is empty — every request will be rejected. Use * to allow any.');
   } else if (allowsAnyDomain(cfg.PORTAL_ALLOWED_EMAIL_DOMAINS)) {
     warn(
-      `wildcard "*" — any address is accepted, so the rotating link and the ` +
+      `wildcard "*" — any address is accepted, so the invite link and the ` +
         `${cfg.PORTAL_DAILY_SEAT_CAP}/day seat cap are your only controls on who gets Global Admin`,
     );
   } else {

@@ -10,7 +10,17 @@ import {
   labNamespaceName,
   labServiceAccountName,
 } from '@/course';
-import { Badge, Callout, Code, CommandStep, Denied, RichText, Shell, relative } from '@/lib/ui';
+import {
+  Badge,
+  Callout,
+  Code,
+  CommandStep,
+  Denied,
+  ExternalLink,
+  RichText,
+  Shell,
+  relative,
+} from '@/lib/ui';
 import type { Reference, ReferenceGroup } from '@/course/types';
 import { Checkpoints } from './Checkpoints';
 
@@ -84,7 +94,7 @@ export default async function SessionPage({
 
   if (!verifyToken(token)) {
     return (
-      <Denied reason="This link is not valid, or it rotated at midnight. Ask your instructor for today's link." />
+      <Denied reason="This link is not valid. Ask your instructor for the workshop link." />
     );
   }
 
@@ -254,6 +264,11 @@ export default async function SessionPage({
                 <div className="mb-5">
                   <Callout tone="warn">
                     <RichText>{session.note}</RichText>
+                    {session.noteLink && (
+                      <div className="mt-2.5">
+                        <ExternalLink label={session.noteLink.label} url={session.noteLink.url} />
+                      </div>
+                    )}
                   </Callout>
                 </div>
               )}

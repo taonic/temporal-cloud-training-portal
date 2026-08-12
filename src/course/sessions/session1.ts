@@ -15,6 +15,18 @@ export const session1: SessionDef = {
   labTitle: 'Provision a namespace with Terraform',
   labMinutes: 15,
 
+  note:
+    '**Everything in this workshop runs in the browser sandbox — open it now and keep it open for ' +
+    'the next two days.** Terraform, the Temporal CLI and its `cloud` extension, .NET and Docker are ' +
+    'all installed there at the right versions, and every command on this page and on Sessions 2 to ' +
+    '6 is typed in its **Terminal** tab, with files edited in its **Editor** tab. Your laptop needs ' +
+    'nothing installed on it and nothing you run locally is graded. The sandbox is also where your ' +
+    'credentials live, so work that you do somewhere else does not carry over.',
+  noteLink: {
+    label: 'Open the workshop sandbox',
+    url: 'https://play.instruqt.com/temporal/invite/rjmcyqr5pc2z',
+  },
+
   /**
    * Setup lives in the lab, not in a Prerequisites block above it.
    *
@@ -30,12 +42,12 @@ export const session1: SessionDef = {
     const address = `${namespaceId}.tmprl.cloud:7233`;
     return [
       {
-        label: 'Work in the sandbox — your laptop needs nothing installed on it',
+        label: 'In the sandbox Terminal, see what it gives you',
         command: 'workshop-help',
         expect:
-          'The command list. The Temporal CLI and its `cloud` extension, Terraform, .NET 8 and ' +
-          'Docker are already here at the right versions, and `terraform init` and `dotnet build` ' +
-          'have already run. Everything below happens in the Terminal and Editor tabs.',
+          'The list of `workshop-*` helper commands, which the sessions refer to by name. ' +
+          '`terraform init` and `dotnet build` have already run, so the toolchain is warm — ' +
+          'nothing here is waiting on a download.',
       },
       {
         label: 'Create an API Key for yourself in the Cloud UI — Settings → API Keys',

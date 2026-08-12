@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { accessTtlMs, config } from '@/config';
-import { checkEmail, rotationDay, verifyToken } from '@/invite/link';
+import { checkEmail, seatCapDay, verifyToken } from '@/invite/link';
 import { ensureSingletonsRunning, requestSeat, workflowIdForEmail } from '@/temporal/client';
 
 export interface InviteFormState {
@@ -18,7 +18,7 @@ export async function requestAccess(
   if (!verifyToken(token)) {
     return {
       status: 'error',
-      message: "This link has rotated. Ask your instructor for today's link.",
+      message: 'That link is not valid. Ask your instructor for the workshop link.',
     };
   }
 
@@ -44,7 +44,7 @@ export async function requestAccess(
   const decision = await requestSeat({
     email: check.email,
     workflowId: workflowIdForEmail(check.email),
-    day: rotationDay(),
+    day: seatCapDay(),
     ttlMs: accessTtlMs(),
     seatCap: cfg.PORTAL_DAILY_SEAT_CAP,
   });

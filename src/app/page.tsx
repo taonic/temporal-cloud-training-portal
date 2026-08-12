@@ -15,7 +15,7 @@ export default async function Page({
 
   if (!verifyToken(token)) {
     return (
-      <Denied reason="This link is not valid, or it rotated at midnight. Ask your instructor for today's link." />
+      <Denied reason="This link is not valid. Ask your instructor for the workshop link." />
     );
   }
 

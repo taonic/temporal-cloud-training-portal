@@ -12,7 +12,7 @@ The invitation lifecycle is Temporal workflows driving the [Cloud Ops API](https
 ```
    student browser
          │
-         │  /?k=<daily token>
+         │  /?k=<invite token>
          ▼
  ┌───────────────────┐        Update: requestSeat        ┌──────────────────────────┐
  │  Next.js (App     │ ────────────────────────────────► │  trainingRegistry        │
@@ -96,9 +96,14 @@ camelCase — only proto shapes are snake.
 
 ## Security posture — read this before running it
 
-**The rotating link is not an access control.** It rotates daily, but it is copy-pasteable and
-valid for up to 24 hours. The real controls are `PORTAL_ALLOWED_EMAIL_DOMAINS` and
+**The invite link is not an access control.** It is copy-pasteable and stays valid until you
+change `PORTAL_LINK_SECRET`. The real controls are `PORTAL_ALLOWED_EMAIL_DOMAINS` and
 `PORTAL_DAILY_SEAT_CAP`.
+
+It used to expire nightly, which bought little — a link is copyable the moment it is projected —
+and cost a lot: cloud access lasts 48 hours, so every student was locked out of the portal halfway
+through their own window and someone had to re-paste a new link on day two. Expiry is now an action
+rather than a clock: change the secret, redeploy, every outstanding link dies at once.
 
 The allowlist takes comma-separated patterns — `example.com` (exact), `*.example.com` (subdomains
 only), or `*` (any domain). An empty value denies everything, so a blank config fails closed;
@@ -120,7 +125,7 @@ identity that owns the portal's Cloud Ops API key. Nothing in the product preven
 below 7 days. Every sweeper deletion will appear in `bvmon`'s audit log under your name.
 
 **The instructor mirror is gated separately.** `/instructor` lists every user and their role, so it
-uses `PORTAL_INSTRUCTOR_TOKEN`, not the daily student link.
+uses `PORTAL_INSTRUCTOR_TOKEN`, not the student link.
 
 ### What the sweeper deletes
 
@@ -197,13 +202,14 @@ and the ranked list of limits — two of which have lead times you don't control
 2. **Beforehand:** `pnpm ops:preflight`, and confirm you are Account Owner on `bvmon`.
 3. **Beforehand:** run the registry once with `SWEEPER_MODE=dry-run` and read a sweep report on
    `/instructor` before switching to `live`.
-4. **On the day:** open `/instructor?t=<token>`, copy today's student link, paste it into chat.
+4. **On the day:** open `/instructor?t=<token>`, copy the student link, paste it into chat.
    Project the mirror.
 5. **After:** the sweeper cleans up as each 48-hour window closes. Check `/instructor` for drift.
 
-The link rotates at midnight `Australia/Sydney` (02:00 NZ — outside workshop hours). Students
-re-use the same link to return to the session content, so **on day two you must re-paste the new
-link**: cloud access lasts 48 hours but the link lasts under 24. This is a known, accepted gap.
+One link for the whole workshop. Students re-use it to return to the session content on day two,
+and there is nothing to re-paste. `PORTAL_DAILY_SEAT_CAP` still resets at midnight
+`Australia/Sydney` (02:00 NZ — outside workshop hours), so a two-day cohort gets its cap back for
+day two without you touching anything.
 
 ---
 
@@ -333,5 +339,6 @@ API keys appear on the big screen is the RBAC lesson that Session 2 then formali
   They are badged and counted separately rather than mixed into the verified total.
 - Nothing prevents a student deleting another student; the sweeper and the invitation workflows
   are idempotent, so the damage is recoverable by re-requesting access, but the interruption is real.
-- Seat-cap accounting is per rotation day and resets at the link boundary, not per cohort.
+- Seat-cap accounting is per calendar day in `PORTAL_LINK_TIMEZONE`, not per cohort. The invite
+  link itself does not expire — only `PORTAL_LINK_SECRET` retires it.
 - The `drift` list is reported but never acted on, by design.

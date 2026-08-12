@@ -1,5 +1,5 @@
 import { config } from '@/config';
-import { allowsAnyDomain, inviteUrl, nextRotationAt, rotationDay } from '@/invite/link';
+import { allowsAnyDomain, inviteUrl, linkIsPinned, nextSeatResetAt } from '@/invite/link';
 import { verifyInstructorToken } from '@/lib/auth';
 import { requestBaseUrl } from '@/lib/request-url';
 import { Callout, Denied, Shell } from '@/lib/ui';
@@ -32,20 +32,33 @@ export default async function InstructorPage({
     >
       <div className="mb-6 space-y-3">
         <div className="card p-5">
-          <div className="label mb-2">Today&apos;s student link · {rotationDay()}</div>
+          <div className="label mb-2">Student link</div>
           <code className="block break-all rounded-lg border border-line-subtle/50 bg-surface-primary/60 px-3.5 py-2.5 font-mono text-[13px] text-brand-soft">
-            {inviteUrl(new Date(), base)}
+            {inviteUrl(base)}
           </code>
           <p className="mt-2 text-xs text-content-faint">
-            Rotates at midnight {cfg.PORTAL_LINK_TIMEZONE} ({nextRotationAt().toISOString()}).
-            Students re-use this same link to return to the session, so re-paste it after rotation.
+            Stable for the whole workshop — students keep using it to return to their sessions, and
+            you do not re-paste it on day two.{' '}
+            {linkIsPinned() ? (
+              <>
+                It is pinned by <code>PORTAL_LINK_CODE</code>, so it survives a{' '}
+                <code>PORTAL_LINK_SECRET</code> change — clear or change that code to retire it.
+              </>
+            ) : (
+              <>
+                It changes only when you change <code>PORTAL_LINK_SECRET</code>, which invalidates
+                every outstanding link at once.
+              </>
+            )}{' '}
+            The seat cap ({cfg.PORTAL_DAILY_SEAT_CAP}/day) resets at midnight{' '}
+            {cfg.PORTAL_LINK_TIMEZONE} ({nextSeatResetAt().toISOString()}).
           </p>
         </div>
 
         {allowsAnyDomain(cfg.PORTAL_ALLOWED_EMAIL_DOMAINS) ? (
           <Callout tone="warn">
             <strong className="font-semibold">Domain allowlist is wide open (<code>*</code>).</strong>{' '}
-            Anyone who obtains today&apos;s link can grant themselves Global Admin on{' '}
+            Anyone who obtains the link can grant themselves Global Admin on{' '}
             {cfg.TRAINING_ACCOUNT_ID} with any address
             {cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.length > 0
               ? ` except ${cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.join(', ')}`

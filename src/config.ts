@@ -31,9 +31,31 @@ const csv = (s: string) =>
 const schema = z.object({
   // ---- Portal ----------------------------------------------------------
   PORTAL_BASE_URL: z.string().url().default('http://localhost:3000'),
-  /** HMAC key for the daily rotating invite link. Rotate this to invalidate every link immediately. */
+  /**
+   * HMAC key the invite link is derived from. The link does NOT rotate on a
+   * clock — changing this value is what invalidates every outstanding link, and
+   * it is the emergency stop.
+   */
   PORTAL_LINK_SECRET: z.string().min(16),
-  /** Timezone whose midnight defines the link rotation boundary. */
+  /**
+   * Pins the invite code to a literal value instead of deriving it from the
+   * secret. Normally unset.
+   *
+   * It exists for continuity: the code used to be derived from the calendar day,
+   * so removing the daily rotation changed everyone's link. Setting the code
+   * that is already in circulation keeps outstanding links working across that
+   * deploy — and across any later change to PORTAL_LINK_SECRET, which is the
+   * catch. While this is set, the secret no longer controls the link, so
+   * retiring it means clearing or changing THIS value.
+   */
+  PORTAL_LINK_CODE: z
+    .string()
+    .optional()
+    .transform((s) => s?.trim().toLowerCase() || undefined)
+    .refine((s) => s === undefined || /^[a-z0-9]{4,32}$/.test(s), {
+      message: 'must be 4-32 lowercase alphanumerics — it gets read off a projector and typed',
+    }),
+  /** Timezone whose midnight resets the daily seat cap. The link itself never expires. */
   PORTAL_LINK_TIMEZONE: z.string().default('Australia/Sydney'),
   /**
    * Who may receive an invitation. Comma-separated patterns:
@@ -51,7 +73,7 @@ const schema = z.object({
    * employer. Empty is the normal value — it blocks nothing.
    */
   PORTAL_BLOCKED_EMAIL_DOMAINS: z.string().default('').transform(csv),
-  /** Maximum invitations issued per rotation day. */
+  /** Maximum invitations issued per day, counted in PORTAL_LINK_TIMEZONE. */
   PORTAL_DAILY_SEAT_CAP: z.coerce.number().int().positive().default(25),
   /** Bearer token for the instructor-only control-plane mirror. */
   PORTAL_INSTRUCTOR_TOKEN: z.string().min(16),

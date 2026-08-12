@@ -11,7 +11,7 @@ interface MirrorPayload {
   inventoryError?: string;
   registry?: RegistryState;
   canary?: CanaryState;
-  link: { url: string; nextRotationMs: number };
+  link: { url: string; nextSeatResetMs: number };
 }
 
 const KIND_LABEL: Record<ResourceKind, string> = {
@@ -150,8 +150,8 @@ export function Mirror({ token }: { token: string }) {
             </dd>
           </div>
           <div>
-            <dt className="label mb-1">Link rotates</dt>
-            <dd className="text-content-body">{relative(data.link.nextRotationMs, data.atMs)}</dd>
+            <dt className="label mb-1">Seat cap resets</dt>
+            <dd className="text-content-body">{relative(data.link.nextSeatResetMs, data.atMs)}</dd>
           </div>
         </dl>
       </section>

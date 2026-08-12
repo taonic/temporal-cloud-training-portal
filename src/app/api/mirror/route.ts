@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { snapshotInventory } from '@/cloud/ops';
 import { getCanaryState, getRegistryState } from '@/temporal/client';
-import { inviteUrl, nextRotationAt } from '@/invite/link';
+import { inviteUrl, nextSeatResetAt } from '@/invite/link';
 import { verifyInstructorToken } from '@/lib/auth';
 import { requestBaseUrl } from '@/lib/request-url';
 
@@ -30,8 +30,8 @@ export async function GET(request: Request) {
     registry,
     canary,
     link: {
-      url: inviteUrl(new Date(), await requestBaseUrl()),
-      nextRotationMs: nextRotationAt().getTime(),
+      url: inviteUrl(await requestBaseUrl()),
+      nextSeatResetMs: nextSeatResetAt().getTime(),
     },
   });
 }

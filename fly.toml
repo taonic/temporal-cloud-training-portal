@@ -32,14 +32,14 @@ primary_region = "syd"
   PORTAL_BASE_URL = "https://temporal-cloud-training-portal.fly.dev"
   PORTAL_LINK_TIMEZONE = "Australia/Sydney"
   # Patterns: "example.com" (exact), "*.example.com" (subdomains), "*" (any).
-  # Empty denies everything. "*" means the rotating link and the seat cap are
+  # Empty denies everything. "*" means the invite link and the seat cap are
   # the only controls on who receives Global Admin.
   PORTAL_ALLOWED_EMAIL_DOMAINS = "*"
   # Never invited, whatever the allowlist says. Same patterns, checked first,
   # wins outright. Empty blocks nothing; this is how you narrow the "*" above
   # without enumerating every attendee's employer.
   PORTAL_BLOCKED_EMAIL_DOMAINS = ""
-  PORTAL_DAILY_SEAT_CAP = "25"
+  PORTAL_DAILY_SEAT_CAP = "50"
   ACCESS_TTL_HOURS = "48"
 
   TRAINING_ACCOUNT_ID = "bvmon"

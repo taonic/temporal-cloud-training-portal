@@ -230,6 +230,12 @@ export interface SessionDef {
   references?: ReferenceGroup[];
   /** Shown above the steps when there is something they must know first. */
   note?: string;
+  /**
+   * A link rendered inside the `note` box. Needed because `RichText` carries no
+   * anchors, and the one thing a student must do before anything else on the
+   * page works — open the sandbox — is a URL.
+   */
+  noteLink?: { label: string; url: string };
   /** Prose instructions. Static, so it cannot carry personalised values. */
   labSteps?: string[];
   /**

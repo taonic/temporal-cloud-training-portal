@@ -64,7 +64,7 @@ export interface SeatRequest {
   email: string;
   /** Derived from the email by the caller; workflow code has no crypto. */
   workflowId: string;
-  /** Rotation day the request arrived on, used for the per-day cap. */
+  /** Calendar day the request arrived on, used for the per-day seat cap. */
   day: string;
   ttlMs: number;
   /** Read from server config at request time and enforced inside the update handler. */
