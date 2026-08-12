@@ -30,6 +30,9 @@ primary_region = "syd"
 # Non-secret configuration. Secrets are set separately — see DEPLOY.md.
 [env]
   PORTAL_BASE_URL = "https://temporal-cloud-training-portal.fly.dev"
+  # PORTAL_LINK_CODE — the invite code students type — is deliberately NOT here.
+  # It is a secret: `fly secrets set PORTAL_LINK_CODE=...`. Setting it is also
+  # how you retire every outstanding link.
   PORTAL_LINK_TIMEZONE = "Australia/Sydney"
   # Patterns: "example.com" (exact), "*.example.com" (subdomains), "*" (any).
   # Empty denies everything. "*" means the invite link and the seat cap are

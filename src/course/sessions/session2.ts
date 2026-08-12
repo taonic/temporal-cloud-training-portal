@@ -31,19 +31,26 @@ import type { SessionDef } from '../types';
  * The two facts that made the old lab worth doing survive without it, because
  * they are properties of the model rather than of custom roles:
  *
- *  1. A namespace-scoped service account still carries an implicit `Read`
- *     account role — the docs are explicit — and `read` already includes
- *     GetUsers, GetNamespaces and ListNamespaces across the whole account. There
- *     is no knob that lowers it, which is exactly why the lab has students
- *     observe it instead of assuming.
+ *  1. A namespace-scoped service account still carries a `Read` account role —
+ *     the docs say "must always have" — and you cannot set it to none. Whatever
+ *     Read-Only can reach, this identity can reach, and nothing in the resource
+ *     lowers it.
  *  2. The precision the product does offer is at the namespace, not the account:
  *     one namespace, one permission, immutable after creation.
  *
- * That is why the section below has students run `temporal cloud user list` and
- * watch it SUCCEED. A least-privilege lab that fakes a denial teaches a control
- * that isn't there. The one account-level thing the floor genuinely cannot do is
- * read the Audit Log — GetAuditLogs is Global Admin and Account Owner only — so
- * that is the denial the lab is built around.
+ * What the docs do NOT settle is how wide fact 1 actually is in practice. The
+ * account-role table lists GetUsers, GetNamespaces and ListNamespaces under
+ * Read-Only, which reads as "account-wide" — but the same reference documents
+ * runtime narrowing on other endpoints, where a role grants the call and the
+ * caller's scope decides what comes back. So the lab has students RUN the two
+ * commands and report what they got, rather than the page asserting an outcome
+ * nobody here has measured. Both answers teach: a wide floor is a design
+ * constraint, and a narrow one means the role table cannot be designed from
+ * alone.
+ *
+ * The denials the lab does assert are ones with unambiguous documentation:
+ * GetAuditLogs is Global Admin and Account Owner only, and a namespace the
+ * service account was not scoped to is not its namespace.
  */
 const REQUIRED_PERMISSION = 'PERMISSION_WRITE';
 /** Anything at or above these on the account makes the namespace grant irrelevant. */
@@ -64,8 +71,9 @@ export const session2: SessionDef = {
     'You are holding Global Admin right now. This lab builds the identity your **Workers** should run ' +
     'as instead: a **namespace-scoped** service account with `write` on one namespace and no ' +
     'account-wide access block at all. That is what Temporal recommends for Worker API keys, and it ' +
-    'needs no custom role — every resource in this lab runs as you. Then find out in "Use what you ' +
-    'built" how much account access it still has anyway, because the answer is not none.',
+    'needs no custom role — every resource in this lab runs as you. Then go and measure what account ' +
+    'access it still has anyway in "Use what you built", because the documentation does not settle ' +
+    'it and a least-privilege model you have not tested is a diagram.',
 
   references: [
     {
@@ -97,7 +105,16 @@ export const session2: SessionDef = {
           url: 'https://docs.temporal.io/cloud/manage-access/permissions-reference',
           note:
             'The per-endpoint table. Worth reading once for `Read-Only`: it is the floor every ' +
-            'principal sits on, and it is wider than the name suggests.',
+            'principal sits on, and on paper it is wider than the name suggests.',
+        },
+        {
+          label: 'Additional authorization behaviors',
+          url: 'https://docs.temporal.io/cloud/manage-access/permissions-reference#additional-authorization-behaviors',
+          note:
+            'Read this before trusting the table above. Some endpoints are granted to every role but ' +
+            'narrowed at runtime — "the action group grants access to call the API, but the scope of ' +
+            'what the caller can interact with depends on their role". This is why the lab has you ' +
+            'run the commands rather than read off a row.',
         },
       ],
     },
@@ -291,18 +308,23 @@ output "worker_api_key" {
           'entirely separately from any account role.',
       },
       {
-        label: 'As the Worker: find the floor — the two things it should not be able to do',
+        label: 'As the Worker: go and find the floor, because the docs do not settle it',
         command:
           'temporal cloud user list --api-key $WORKER_API_KEY\ntemporal cloud namespace list --api-key $WORKER_API_KEY',
         expect:
-          '**Both succeed, and that is the lesson.** You wrote no account access at all, and this ' +
-          'identity still has some: a namespace-scoped service account always carries an implicit ' +
-          '`Read` account role, and `Read` already includes GetUsers, GetNamespaces and ListNamespaces ' +
-          'across the whole account. There is no argument that lowers it — not `none`, not a custom ' +
-          'role, which could only add. The identity your Worker runs as can enumerate every colleague ' +
-          'and every namespace in the account, not because you granted it, but because that is the ' +
-          'floor. Check it yourself in the permissions reference (linked below) before you design ' +
-          'around where you assume the floor sits.',
+          'Genuinely find out, and read the answer against these two documented facts. **One:** a ' +
+          'namespace-scoped service account *always* carries a `Read` account role — you cannot set ' +
+          'it to none, and a custom role could only add to it. **Two:** the account-role table lists ' +
+          '`GetUsers`, `GetNamespaces` and `ListNamespaces` under Read-Only. Put together, this ' +
+          'identity should be able to enumerate every colleague and every namespace in the account, ' +
+          'having been granted nothing at the account level by you. ' +
+          'It may not. The permissions reference also documents **runtime narrowing** on some ' +
+          'endpoints — API keys and service accounts are listed there, where the role grants the call ' +
+          'but the scope of what comes back depends on the caller — and "scoped to a single ' +
+          'namespace" is exactly where you would expect more of that. Both answers are worth having: ' +
+          'succeeding means the floor is wider than the word "scoped" suggests, and being denied ' +
+          'means the role table is not the whole story and you cannot design from it alone. What you ' +
+          'must not do is assume. Say out loud which one you got.',
       },
       {
         label: 'The one account-level thing the floor really does deny',

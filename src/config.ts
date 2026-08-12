@@ -32,27 +32,25 @@ const schema = z.object({
   // ---- Portal ----------------------------------------------------------
   PORTAL_BASE_URL: z.string().url().default('http://localhost:3000'),
   /**
-   * HMAC key the invite link is derived from. The link does NOT rotate on a
-   * clock — changing this value is what invalidates every outstanding link, and
-   * it is the emergency stop.
-   */
-  PORTAL_LINK_SECRET: z.string().min(16),
-  /**
-   * Pins the invite code to a literal value instead of deriving it from the
-   * secret. Normally unset.
+   * The invite code students type, and the whole of the link. Six lowercase
+   * alphanumerics is the sweet spot: short enough to read off a projector, and
+   * base36 rather than hex keeps four times the keyspace per character.
    *
-   * It exists for continuity: the code used to be derived from the calendar day,
-   * so removing the daily rotation changed everyone's link. Setting the code
-   * that is already in circulation keeps outstanding links working across that
-   * deploy — and across any later change to PORTAL_LINK_SECRET, which is the
-   * catch. While this is set, the secret no longer controls the link, so
-   * retiring it means clearing or changing THIS value.
+   * No hashing and nothing derived at runtime — see src/invite/link.ts for the
+   * two rounds of removal that got here. It is still deployed as a secret, and
+   * setting a new value retires every outstanding link, so it is the emergency
+   * stop.
+   * Keep it random-looking: `openssl rand -hex 4`, or the characters of a link
+   * already in circulation that you want to keep alive.
+   *
+   * A deliberately small keyspace, and a permanent one. It gates who may
+   * REQUEST access, never who receives it — that is PORTAL_ALLOWED_EMAIL_DOMAINS
+   * and the seat cap.
    */
   PORTAL_LINK_CODE: z
     .string()
-    .optional()
-    .transform((s) => s?.trim().toLowerCase() || undefined)
-    .refine((s) => s === undefined || /^[a-z0-9]{4,32}$/.test(s), {
+    .transform((v) => v.trim().toLowerCase())
+    .refine((v) => /^[a-z0-9]{4,32}$/.test(v), {
       message: 'must be 4-32 lowercase alphanumerics — it gets read off a projector and typed',
     }),
   /** Timezone whose midnight resets the daily seat cap. The link itself never expires. */

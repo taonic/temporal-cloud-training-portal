@@ -24,13 +24,7 @@ import {
   type CloudUser,
 } from '../src/cloud/types';
 import { getTemporalClient } from '../src/temporal/client';
-import {
-  allowsAnyDomain,
-  domainMatches,
-  inviteUrl,
-  linkIsPinned,
-  nextSeatResetAt,
-} from '../src/invite/link';
+import { allowsAnyDomain, domainMatches, inviteUrl, nextSeatResetAt } from '../src/invite/link';
 
 let failures = 0;
 
@@ -176,15 +170,7 @@ async function main() {
   /* -- Portal configuration ---------------------------------------------- */
   console.log(`\nInvite link`);
   ok(inviteUrl());
-  if (linkIsPinned()) {
-    warn(
-      'pinned by PORTAL_LINK_CODE, so it survives a PORTAL_LINK_SECRET change. That is the point ' +
-        'when you are keeping circulated links alive, and it also means rotating the secret retires ' +
-        'nothing — clear or change PORTAL_LINK_CODE to kill this link.',
-    );
-  } else {
-    ok('stable — it changes only when you change PORTAL_LINK_SECRET');
-  }
+  ok('stable — it changes only when you set a new PORTAL_LINK_CODE');
   ok(`daily seat cap of ${cfg.PORTAL_DAILY_SEAT_CAP} resets at ${nextSeatResetAt().toISOString()} (midnight ${cfg.PORTAL_LINK_TIMEZONE})`);
   warn(
     'the URL above uses PORTAL_BASE_URL, the no-request fallback. /instructor derives ' +

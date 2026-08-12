@@ -97,13 +97,16 @@ camelCase — only proto shapes are snake.
 ## Security posture — read this before running it
 
 **The invite link is not an access control.** It is copy-pasteable and stays valid until you
-change `PORTAL_LINK_SECRET`. The real controls are `PORTAL_ALLOWED_EMAIL_DOMAINS` and
+change `PORTAL_LINK_CODE`. The real controls are `PORTAL_ALLOWED_EMAIL_DOMAINS` and
 `PORTAL_DAILY_SEAT_CAP`.
 
-It used to expire nightly, which bought little — a link is copyable the moment it is projected —
-and cost a lot: cloud access lasts 48 hours, so every student was locked out of the portal halfway
-through their own window and someone had to re-paste a new link on day two. Expiry is now an action
-rather than a clock: change the secret, redeploy, every outstanding link dies at once.
+The link is one configured code — six lowercase alphanumerics, no secret behind it, nothing derived
+at runtime. It got there by removing two things. It used to be an HMAC of the calendar day, which
+expired every link at midnight: cloud access lasts 48 hours, so students were locked out of the
+portal halfway through their own window and someone re-pasted a new link on day two. With the day
+dropped, hashing a secret to produce one fixed string bought nothing over configuring that string,
+so the secret went too. What is left is one value, deployed as a secret: set a new
+`PORTAL_LINK_CODE` and every outstanding link dies at once.
 
 The allowlist takes comma-separated patterns — `example.com` (exact), `*.example.com` (subdomains
 only), or `*` (any domain). An empty value denies everything, so a blank config fails closed;
@@ -274,14 +277,19 @@ the principal its data-plane access. Neither the elevated key nor the cap exists
 resource in Lab 2 now runs as the student.
 
 The lesson survives the removal, because it was never really about custom roles. A namespace-scoped
-service account still carries an **implicit `Read` account role** — the docs are explicit — and
-`read` already includes `GetUsers`, `GetNamespaces` and `ListNamespaces` account-wide. There is no
-argument that lowers it: not `none`, and not a custom role, which could only ever add. So the section
-has students run `temporal cloud user list` as their Worker identity and watch it **succeed** — a
-least-privilege lab that stages a fake denial teaches a control that isn't there. The real denials
-are `GetAuditLogs`, which is Global Admin and Account Owner only, and any *other* namespace: the
-identity can enumerate every namespace in the account and act in exactly one. That gap is the reason
-namespace permissions exist separately from account roles.
+service account still carries a **`Read` account role** — the docs say "must always have" — and no
+argument lowers it: not `none`, and not a custom role, which could only ever add. How *wide* that
+floor is, though, is something the docs leave open: the account-role table lists `GetUsers`,
+`GetNamespaces` and `ListNamespaces` under Read-Only, while the same reference documents **runtime
+narrowing** on other endpoints, where the role grants the call and the caller's scope decides what
+comes back. So the session has students run those commands as their Worker identity and **report what
+they got**, rather than the page claiming an outcome nobody measured. Either answer is a design
+constraint worth knowing, and a least-privilege lab that stages a fake denial teaches a control that
+isn't there.
+
+Two denials *are* asserted, because both are unambiguous: `GetAuditLogs` is Global Admin and Account
+Owner only, and any namespace the service account was not scoped to is simply not its namespace. The
+second is the reason namespace permissions exist separately from account roles.
 
 Adding a session is one file in `src/course/sessions/` plus a line in `src/course/index.ts`. Each
 session owns its checkpoints and its own `grade(ctx)`; the context memoises account reads, so
@@ -340,5 +348,5 @@ API keys appear on the big screen is the RBAC lesson that Session 2 then formali
 - Nothing prevents a student deleting another student; the sweeper and the invitation workflows
   are idempotent, so the damage is recoverable by re-requesting access, but the interruption is real.
 - Seat-cap accounting is per calendar day in `PORTAL_LINK_TIMEZONE`, not per cohort. The invite
-  link itself does not expire — only `PORTAL_LINK_SECRET` retires it.
+  link itself does not expire — only changing `PORTAL_LINK_CODE` retires it.
 - The `drift` list is reported but never acted on, by design.

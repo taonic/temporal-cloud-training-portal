@@ -137,7 +137,7 @@ Ordered by how likely they are to bite you.
 |---|---|---|---|
 | 1 | **10 namespaces** default per account | Session 1 fails for everyone past the tenth student | Support ticket, 2 weeks ahead |
 | 2 | **A namespace-scoped service account's namespace is immutable** | A student who scopes Lab 2's service account to the wrong namespace must destroy and recreate it, key included | The portal fills the id in for them; the checkpoint names the namespace it expected |
-| 3 | **The invite link never expires on its own** | A link projected on day one keeps working for anyone who photographed it, until you change the secret | `fly secrets set PORTAL_LINK_SECRET=...` after the workshop. It replaced nightly rotation, which locked students out on day two while their Cloud access still had 24h left |
+| 3 | **The invite link never expires on its own** | A link projected on day one keeps working for anyone who photographed it, until you change the code | `fly secrets set PORTAL_LINK_CODE=...` after the workshop. It replaced nightly rotation, which locked students out on day two while their Cloud access still had 24h left |
 | 4 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop; failing that, set `PORTAL_BLOCKED_EMAIL_DOMAINS` to the consumer mail providers |
 | 5 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
 | 6 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
@@ -165,13 +165,12 @@ clean sweep, or revoke by hand in the Cloud UI first.
 anyone who photographed it off the projector can keep requesting seats until you act:
 
 ```bash
-fly secrets set PORTAL_LINK_SECRET="$(openssl rand -base64 32)"
-fly secrets unset PORTAL_LINK_CODE     # only if a pinned code is in force
+fly secrets set PORTAL_LINK_CODE="$(openssl rand -hex 4)"
 ```
 
-The second line matters: `PORTAL_LINK_CODE` pins the link to a literal and overrides the secret
-entirely, so rotating the secret alone leaves a pinned link working. `/instructor` and
-`pnpm ops:preflight` both tell you which is in force. Every outstanding link dies with it. Access already granted is unaffected — the running
+The code *is* the link, so every outstanding link dies with that one command — and `fly secrets set`
+restarts the machine itself, so there is no separate deploy. Access already granted is unaffected: the running `invitation` workflows still revoke on
+their own schedule. Access already granted is unaffected — the running
 `invitation` workflows still revoke on their own schedule.
 
 ---
@@ -209,14 +208,19 @@ make the point — there is nothing for a custom role to add to an identity that
 one namespace permission. Do not offer to demo creating one on `bvmon`; it is an Account Owner
 permission and the roles are capped at 25 per account permanently.
 
-Read the "Use what you built" section before you teach it, because it deliberately ends in a
-surprise. The identity is the one a **Worker** runs as, and students run `temporal cloud user list`
-and `temporal cloud namespace list` with it and watch **both succeed** — having written no account
-access whatsoever. That is correct and intended: a namespace-scoped service account always carries
-an implicit `Read` account role, and Read-Only already grants `GetUsers`, `GetNamespaces` and
-`ListNamespaces` account-wide. Nothing lowers it. Someone will call it a bug. It is the most useful
-thing in the session — for a bank in particular, "our service accounts are read-only" does not mean
-what people assume. The permissions reference is linked from the page; put it on screen.
+Read the "Use what you built" section before you teach it, because one step is a genuine experiment
+and you should know the answer before the room does. Students run `temporal cloud user list` and
+`temporal cloud namespace list` as the Worker identity, having written no account access whatsoever.
+The documented facts point at both succeeding — a namespace-scoped service account always carries a
+`Read` account role, and the role table lists those three reads under Read-Only — but the same
+permissions reference documents runtime narrowing on other endpoints, so a denial is entirely
+possible and would mean the table cannot be designed from alone. **Run it once on `bvmon` yourself
+before the workshop** and you will be teaching a fact instead of a maybe.
+
+Whichever it is, that is the most useful five minutes in the session — for a bank in particular,
+"our service accounts are read-only" does not mean what people assume in either direction. The
+permissions reference and the runtime-narrowing section are both linked from the page; put them on
+screen.
 
 Two genuine denials follow, and they are the pair worth landing. `temporal cloud account audit-log
 list` fails because `GetAuditLogs` is Global Admin and Account Owner only — pair it with the

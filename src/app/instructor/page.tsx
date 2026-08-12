@@ -1,5 +1,5 @@
 import { config } from '@/config';
-import { allowsAnyDomain, inviteUrl, linkIsPinned, nextSeatResetAt } from '@/invite/link';
+import { allowsAnyDomain, inviteUrl, nextSeatResetAt } from '@/invite/link';
 import { verifyInstructorToken } from '@/lib/auth';
 import { requestBaseUrl } from '@/lib/request-url';
 import { Callout, Denied, Shell } from '@/lib/ui';
@@ -38,19 +38,8 @@ export default async function InstructorPage({
           </code>
           <p className="mt-2 text-xs text-content-faint">
             Stable for the whole workshop — students keep using it to return to their sessions, and
-            you do not re-paste it on day two.{' '}
-            {linkIsPinned() ? (
-              <>
-                It is pinned by <code>PORTAL_LINK_CODE</code>, so it survives a{' '}
-                <code>PORTAL_LINK_SECRET</code> change — clear or change that code to retire it.
-              </>
-            ) : (
-              <>
-                It changes only when you change <code>PORTAL_LINK_SECRET</code>, which invalidates
-                every outstanding link at once.
-              </>
-            )}{' '}
-            The seat cap ({cfg.PORTAL_DAILY_SEAT_CAP}/day) resets at midnight{' '}
+            you do not re-paste it on day two. It changes only when you change{' '}
+            <code>PORTAL_LINK_CODE</code>, which invalidates every outstanding link at once. The seat cap ({cfg.PORTAL_DAILY_SEAT_CAP}/day) resets at midnight{' '}
             {cfg.PORTAL_LINK_TIMEZONE} ({nextSeatResetAt().toISOString()}).
           </p>
         </div>
@@ -64,7 +53,7 @@ export default async function InstructorPage({
               ? ` except ${cfg.PORTAL_BLOCKED_EMAIL_DOMAINS.join(', ')}`
               : ''}
             . The seat cap ({cfg.PORTAL_DAILY_SEAT_CAP}
-            /day) is the only remaining limit. Rotate <code>PORTAL_LINK_SECRET</code> to kill every
+            /day) is the only remaining limit. Change <code>PORTAL_LINK_CODE</code> to kill every
             outstanding link at once.
           </Callout>
         ) : cfg.PORTAL_ALLOWED_EMAIL_DOMAINS.length === 0 ? (

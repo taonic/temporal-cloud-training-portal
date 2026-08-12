@@ -1,16 +1,31 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 import { config } from '@/config';
 
 /**
- * The invite link is a keyed hash of PORTAL_LINK_SECRET, so there is no link
- * table to store or replicate — any process holding the secret derives the same
- * token, and rotating the secret invalidates every outstanding link at once.
+ * The invite link is one configured code, PORTAL_LINK_CODE. There is no link
+ * table to store or replicate and nothing derived at runtime — every process
+ * reads the same value from its environment.
  *
- * The token does NOT rotate on its own. It used to be derived from the calendar
- * day, which expired every link at midnight and locked students out of the
- * portal on day two while they still held 48 hours of Cloud access — a link that
- * dies halfway through the thing it grants access to. Rotation is now an action
- * an instructor takes (change the secret, redeploy) rather than a clock.
+ * It has been through two simpler-is-better rounds worth recording, because
+ * both were tried in the other direction first:
+ *
+ *  1. It used to be an HMAC of the calendar day, which expired every link at
+ *     midnight. Cloud access lasts 48 hours, so students were locked out of the
+ *     portal halfway through their own window and someone had to re-paste a new
+ *     link on day two. Expiry became an action rather than a clock.
+ *  2. It was then an HMAC of PORTAL_LINK_SECRET with the day dropped — but with
+ *     no rotation left, hashing a secret to produce one fixed string bought
+ *     nothing over configuring that string. The secret is gone; the code is the
+ *     configuration.
+ *
+ * Retiring a link is therefore one command: set a new PORTAL_LINK_CODE. Every
+ * outstanding link dies at once, and access already granted is untouched — the
+ * running `invitation` workflows still revoke on their own schedule.
+ *
+ * It is deployed as a SECRET rather than as plain config. Six characters that get
+ * projected onto a wall are not much of a secret, but they are the only thing
+ * between a stranger and the invite form, and a value in git is a value that
+ * outlives the workshop it was for.
  *
  * This gates who may REQUEST access. It is not, on its own, an access control —
  * the email domain allowlist and the seat cap are. See README.
@@ -35,37 +50,8 @@ export function seatCapDay(at: Date = new Date(), timeZone = config().PORTAL_LIN
   }).format(at);
 }
 
-/**
- * Six lowercase alphanumerics: short enough to read out loud or type from a
- * projector. Base36 rather than hex, because 36^6 ≈ 2.2e9 keeps four times the
- * bits of 16^6 ≈ 1.7e7 for the same six characters.
- *
- * This is a deliberately small keyspace, and now a permanent one: with no daily
- * rotation, a token stays valid until PORTAL_LINK_SECRET changes. It is a
- * convenience gate on who can *request* access, never the control on who
- * *receives* it — that is PORTAL_ALLOWED_EMAIL_DOMAINS and the seat cap. See the
- * README security section.
- */
-export const TOKEN_LENGTH = 6;
-
 export function currentToken(): string {
-  // An operator-pinned code wins, for keeping links already in circulation
-  // alive. See PORTAL_LINK_CODE — note that while it is set, changing
-  // PORTAL_LINK_SECRET no longer retires anything.
-  const pinned = config().PORTAL_LINK_CODE;
-  if (pinned) return pinned;
-
-  const digest = createHmac('sha256', config().PORTAL_LINK_SECRET).update('invite').digest();
-
-  // Take 64 bits and render base36 (0-9a-z, already lowercase). Keeping the
-  // low-order characters is equivalent to mod 36^6; 2^64 is ~8.5e9 times
-  // larger, so the modulo bias is far below one part in a billion.
-  return digest.readBigUInt64BE(0).toString(36).padStart(TOKEN_LENGTH, '0').slice(-TOKEN_LENGTH);
-}
-
-/** True when the link comes from PORTAL_LINK_CODE rather than from the secret. */
-export function linkIsPinned(): boolean {
-  return config().PORTAL_LINK_CODE !== undefined;
+  return config().PORTAL_LINK_CODE;
 }
 
 export function verifyToken(candidate: string | null | undefined): boolean {
