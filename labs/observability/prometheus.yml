@@ -18,7 +18,7 @@ scrape_configs:
     scheme: http
     static_configs:
       # The worker's Prometheus endpoint, on the host rather than in a container:
-      #   uv run main.py worker --metrics-port 9464
+      #   uv run lab3_metrics.py worker
       - targets: ['host.docker.internal:9464']
         labels:
           group: 'sdk-metrics'

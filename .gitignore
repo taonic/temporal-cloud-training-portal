@@ -32,5 +32,5 @@ course.md
 quiz.md
 nice-to-have.md
 
-# Instructor-only Rate Desk credential (labs/worker/.env.desk.example is the template)
+# Instructor-only Risk Desk credential (labs/worker/.env.desk.example is the template)
 labs/worker/.env.desk

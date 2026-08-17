@@ -124,7 +124,7 @@ export interface CloudNamespace {
     custom_search_attributes?: ProtoMap;
     api_key_auth?: { enabled?: boolean };
     mtls_auth?: { enabled?: boolean; accepted_client_ca?: string };
-    /** Empty `endpoint` means no codec server — the encryption-proxy pattern relies on that. */
+    /** Empty `endpoint` means no codec server is configured for the namespace. */
     codec_server?: { endpoint?: string };
     lifecycle?: { enable_delete_protection?: boolean };
     connectivity_rule_ids?: string[];
@@ -249,7 +249,16 @@ export interface CloudNexusEndpoint {
   resource_version: string;
   state: ResourceState;
   created_time?: ProtoTimestamp;
-  spec?: { name?: string };
+  spec?: {
+    name?: string;
+    target_spec?: {
+      worker_target_spec?: { namespace_id?: string; task_queue?: string };
+    };
+    /** The caller allowlist. Empty means nobody may call — the default. */
+    policy_specs?: Array<{
+      allowed_cloud_namespace_policy_spec?: { namespace_id?: string };
+    }>;
+  };
 }
 
 export interface CloudRegion {

@@ -5,15 +5,13 @@ Everything you touch during the workshop lives here.
 ```
 labs/
   *.tf              Terraform — plumbing done, resources yours to write
-  worker/           Python worker and workflows, run with uv (Labs 1, 5, 6, 7)
-  observability/    Prometheus + Grafana on Docker (Lab 5)
-  proxy/            Encryption proxy — parked with Lab 4, not running this cohort
+  worker/           Python worker and workflows, run with uv (Labs 1, 3, 4 and 5)
+  observability/    Prometheus + Grafana on Docker (Lab 3)
 ```
 
-This cohort runs Labs **1, 2, 5, 6 and 7**. Worker Versioning (3) and the
-Encryption Proxy (4) are parked: their session pages, lab headers and sandbox
-assets all still exist, they are simply not in the running course. Numbers are
-unchanged so nothing you write today has to move if they come back.
+The course is five labs and they run in order. Worker Versioning and the
+Encryption Proxy used to sit in the middle; both are gone from this repo, and
+`git log` is where they live now.
 
 The Terraform plumbing is already set up — provider and version pin — so
 `terraform init` works before you have written a line.
@@ -24,11 +22,30 @@ header in each.
 than write. If you break something in there, `git checkout labs/worker` puts it
 back.
 
-The worker needs no install step and no virtualenv you manage. `uv run main.py
-<command>` creates the environment from `uv.lock` on first use — pinned versions,
-same for everyone in the room — and reuses it after that. The lockfile is
-committed on purpose; it is what makes that first run offline-safe once the
-sandbox image has warmed the cache.
+There is one entrypoint per lab, and you only ever run the one you are on:
+
+| Script | Lab | Commands |
+|---|---|---|
+| `lab1_hello.py` | 1 | `worker`, `start` |
+| `lab3_metrics.py` | 3 | `worker` (exports Prometheus), `load` |
+| `lab4_review.py` | 4 | `worker`, `review` — plus `desk` and `decide`, which are your instructor's |
+| `lab5_chaos.py` | 5 | `worker --break-determinism`, `determinism`, `stuck` |
+
+They share `training/`, and share one task queue on purpose: a worker you left
+running in another terminal has to be able to serve the lab you are on now, or
+you spend twenty minutes debugging a workflow that never starts because of a
+process you forgot about. `training/worker.py` says the same thing at more
+length.
+
+The worker needs no install step and no virtualenv you manage. `uv run
+lab1_hello.py worker` creates the environment from `uv.lock` on first use —
+pinned versions, same for everyone in the room — and reuses it after that. The
+lockfile is committed on purpose; it is what makes that first run offline-safe
+once the sandbox image has warmed the cache.
+
+Lab 4's desk is the exception: it needs an agent framework, so it lives in an
+optional dependency group and only your instructor resolves it
+(`uv run --group desk lab4_review.py desk`). Your side stays at one dependency.
 
 ## Once, at the start
 
@@ -60,9 +77,9 @@ and nothing reads it if your sandbox still exports it.)
 |---|---|
 | `lab1.tf` | Namespace, region, retention, and the one `provisioner` tag block |
 | `lab2.tf` | Namespace-scoped Worker service account, its API key, operators group and access |
-| `lab5.tf` | Metrics Read-Only service account, its API key, and the dashboard/alert catalogue tag |
-| `lab6.tf` | Nothing — you are a caller on your instructor's Nexus endpoint. Boundary decision tag |
-| `lab7.tf` | Runbook and escalation tag |
+| `lab3.tf` | Metrics Read-Only service account, its API key, and the dashboard/alert catalogue tag |
+| `lab4.tf` | Nothing — you are a caller on your instructor's Nexus endpoint, and the artifact is a workflow history |
+| `lab5.tf` | Runbook and escalation tag |
 
 Each file opens with what to build and what the grader checks. The full,
 personalised configuration is on the matching session page in the portal — these
@@ -102,13 +119,13 @@ identity; `temporalcloud_group_access` is a separate resource keyed by the
 group's `id`, and it is the one that carries `namespace_accesses`. Create only
 the first and you have entitled nobody.
 
-## Getting a service account key out (Labs 2 and 5)
+## Getting a service account key out (Labs 2 and 3)
 
 Terraform will not print a sensitive value unless you name it:
 
 ```bash
 terraform output -raw worker_api_key     # Lab 2 — the Worker's identity
-terraform output -raw metrics_api_key    # Lab 5 — the metrics scraper's identity
+terraform output -raw metrics_api_key    # Lab 3 — the metrics scraper's identity
 ```
 
 Two service accounts, two keys, two entirely different shapes — and holding them next to each other

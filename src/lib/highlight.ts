@@ -55,7 +55,7 @@ const LITERALS = new Set(['true', 'false', 'null']);
 
 /**
  * YAML 1.1 also reads these as booleans. They stay out of the shared set
- * because "no" is an ordinary English word, and the runbook prose in Session 7
+ * because "no" is an ordinary English word, and the runbook prose in Session 5
  * ("Workflow stuck, no error") is scanned as HCL.
  */
 const YAML_LITERALS = new Set(['yes', 'no', 'on', 'off', '~']);

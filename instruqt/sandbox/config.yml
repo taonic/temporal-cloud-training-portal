@@ -2,14 +2,14 @@ name: Temporal Cloud Platform Workshop
 slug: temporal-cloud-platform-workshop
 description: Six-session platform workshop sandbox — Temporal CLI + cloud extension,
   Terraform, both worker toolchains (Python 3.12 + uv, .NET SDK 8), Docker Compose,
-  pre-pulled proxy/Prometheus/Grafana images, code-server, and the lab repo cloned,
+  pre-pulled Prometheus/Grafana images, code-server, and the lab repo cloned,
   restored and built
 virtualmachines:
 - name: temporal-cloud-workshop
   image: instruqt/docker-28-3
   shell: /bin/bash
   # The worker build (uv sync or dotnet restore + build), a Docker daemon,
-  # code-server and (in Session 5) a Prometheus + Grafana pair all run at once.
+  # code-server and (in Session 3) a Prometheus + Grafana pair all run at once.
   # n1-standard-1 does not carry it.
   machine_type: n1-standard-4
   memory: 16384
@@ -21,13 +21,16 @@ virtualmachines:
   - http
   - https
   - high-ports
-  # Sessions 4 and 5 run temporal-proxy, Prometheus and Grafana as containers.
+  # Session 3 runs Prometheus and Grafana as containers.
   nested_virtualization: true
   # code-server serves HTTPS; service tabs want a real certificate.
   provision_ssl_certificate: true
   environment:
     LAB_REPO_URL: https://github.com/taonic/temporal-cloud-training-portal.git
-    LAB_REPO_REF: main
+    # The Python labs branch. A slashed branch name is qualified to
+    # refs/heads/... by the setup script — GitHub's tarball endpoint answers 504
+    # for the bare form.
+    LAB_REPO_REF: taonic/python
     WORKSHOP_DIR: /workspace/workshop
     TEMPORAL_ACCOUNT: bvmon
 

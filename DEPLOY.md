@@ -94,7 +94,7 @@ Non-secret, version-controlled, already populated in `fly.toml`. Change them the
 | `SWEEPER_MODE` | `dry-run` | Ships as `dry-run` deliberately. See step 6. |
 | `SWEEPER_INTERVAL_MINUTES` | `15` | |
 | `LAB_NAMESPACE_PREFIX` | `training-` | Namespace names are `<prefix><email-local-part>`, capped at 39 chars. |
-| `LAB_REQUIRED_REGION` | `azure-australiaeast` | Session 1's exit check. Confirm with `pnpm ops:preflight`. |
+| `LAB_REQUIRED_REGION` | `aws-ap-southeast-2` | Session 1's exit check. Confirm with `pnpm ops:preflight`. |
 
 ---
 
@@ -137,9 +137,10 @@ canary green with the identity your Cloud Ops key belongs to, and the baseline r
 
 ## 6. Before the first real workshop
 
-1. Leave `SWEEPER_MODE=dry-run` for one full pass (≤15 minutes). Read the sweep report at the
-   bottom of `/instructor`. Every row should say `would-delete` only for things you recognise as
-   workshop debris.
+1. Leave `SWEEPER_MODE=dry-run` for one full pass (≤15 minutes). Read the sweep report — it is
+   registry workflow state, not a page, so pull it from the mirror API:
+   `curl -s "$URL/api/mirror?t=$PORTAL_INSTRUCTOR_TOKEN" | jq .registry.lastSweep`. Every decision
+   should say `would-delete` only for things you recognise as workshop debris.
 2. Flip it: set `SWEEPER_MODE = "live"` in `fly.toml`, `fly deploy`.
 3. Confirm you hold **Account Owner** on `bvmon`, not merely Global Admin — a student with Global
    Admin can otherwise delete you.

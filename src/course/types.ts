@@ -48,7 +48,7 @@ export interface GradeContext {
   /** Per-student resource names, derived from the email. */
   namespaceName: string;
   serviceAccountName: string;
-  /** Session 5's metrics scraper — a second service account, in the opposite shape. */
+  /** Session 3's metrics scraper — a second service account, in the opposite shape. */
   metricsAccountName: string;
   groupName: string;
   customRoleName: string;
@@ -90,7 +90,7 @@ export interface SnippetContext {
   namespaceId: string;
   accountId: string;
   serviceAccountName: string;
-  /** Session 5's metrics scraper — a second service account, in the opposite shape. */
+  /** Session 3's metrics scraper — a second service account, in the opposite shape. */
   metricsAccountName: string;
   groupName: string;
   customRoleName: string;
@@ -113,7 +113,7 @@ export interface UseStep {
   expect: string;
   /**
    * Short badge text for a step the rest of the workshop depends on, e.g.
-   * "required by Sessions 3-7".
+   * "required by Sessions 3-5".
    *
    * This section is labelled *not graded*, which is honest and also an
    * invitation to skip it — and one step in Session 2 writes the credential
@@ -128,7 +128,7 @@ export interface UseStep {
  * rather than a file you paste whole.
  *
  * `grades` names the checkpoint the step satisfies, and the page renders it as a
- * badge. That linkage exists because the alternative already bit us: Lab 3's
+ * badge. That linkage exists because the alternative already bit us: Lab 6's
  * `set-current-version` — the only action that satisfies `current-version-moved`
  * — sat in "Use what you built", a section the page labels *not graded*. A
  * student could finish the Lab exactly as written and still fail the exit check.
@@ -250,8 +250,9 @@ export interface SessionDef {
   labCommands?: (ctx: SnippetContext) => LabStep[];
   snippet?: (ctx: SnippetContext) => string;
   /**
-   * Language the lab snippet is coloured as. Terraform for every session but
-   * the proxy one, whose snippet is `labs/proxy/config.yaml`.
+   * Language the lab snippet is coloured as. Terraform for every session that
+   * writes resources; Session 4 uses it for a commented HCL file that
+   * deliberately declares nothing.
    */
   snippetLang?: SnippetLang;
   /** Exercise what the lab created, rather than only proving it exists. */

@@ -99,7 +99,7 @@ const CASES: Case[] = [
   },
   {
     rpc: 'GetUserGroups',
-    why: 'Session 3 grades groups, and the sweeper deletes the ones students create',
+    why: 'Session 6 grades groups, and the sweeper deletes the ones students create',
     request: { page_size: 100, page_token: '' },
   },
   {
@@ -137,6 +137,46 @@ const CASES: Case[] = [
   },
   { rpc: 'GetRegions', why: '', request: {} },
   { rpc: 'GetCurrentIdentity', why: '', request: {} },
+  {
+    rpc: 'CreateNexusEndpoint',
+    why: 'a dropped policy_specs creates an endpoint nobody may call — and the failure looks like a permissions problem on the student side',
+    request: {
+      spec: {
+        name: 'risk-desk',
+        target_spec: {
+          worker_target_spec: { namespace_id: 'desk-ns.acct', task_queue: 'risk-desk' },
+        },
+        policy_specs: [
+          { allowed_cloud_namespace_policy_spec: { namespace_id: 'training-a.acct' } },
+          { allowed_cloud_namespace_policy_spec: { namespace_id: 'training-b.acct' } },
+        ],
+      },
+      async_operation_id: 'setup-abc',
+    },
+  },
+  {
+    rpc: 'UpdateNexusEndpoint',
+    why: 'a dropped resource_version turns optimistic concurrency off, so two roster writes silently overwrite each other',
+    request: {
+      endpoint_id: 'ep-1',
+      spec: {
+        name: 'risk-desk',
+        target_spec: {
+          worker_target_spec: { namespace_id: 'desk-ns.acct', task_queue: 'risk-desk' },
+        },
+        policy_specs: [
+          { allowed_cloud_namespace_policy_spec: { namespace_id: 'training-a.acct' } },
+        ],
+      },
+      resource_version: 'v1',
+      async_operation_id: 'setup-abc',
+    },
+  },
+  {
+    rpc: 'GetAsyncOperation',
+    why: 'a dropped id makes the wait loop poll nothing and report success',
+    request: { async_operation_id: 'setup-abc' },
+  },
 ];
 
 /** Every leaf path in an object, as ["a.b.c", value] pairs. */

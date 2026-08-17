@@ -1,6 +1,6 @@
 import { config } from '@/config';
 import { listNamespaces } from './ops';
-import { namespaceReader } from './dataplane';
+import { namespaceReader, signalHumanDecision } from './dataplane';
 
 /**
  * The read behind the instructor's Nexus Switchboard.
@@ -28,8 +28,19 @@ import { namespaceReader } from './dataplane';
 
 /** Matches the `PaymentWorkflow` in labs/worker. */
 const CALLER_WORKFLOW_TYPE = 'PaymentWorkflow';
+/** The desk's own workflow — one per call, id `review-<caller namespace>`. */
+const HANDLER_WORKFLOW_TYPE = 'ReviewWorkflow';
 /** How many namespaces to probe concurrently. Keeps a big cohort from stampeding. */
 const CONCURRENCY = 6;
+/** Most parked reviews worth showing at once. A cohort produces one each at most. */
+const ESCALATION_LIMIT = 25;
+/**
+ * Queries run wider than the namespace probes above: they are one cheap call each,
+ * and a stopped desk makes every one of them sit until its deadline. One batch of
+ * this width is the difference between a screen that pauses for a beat during the
+ * outage round and one that pauses for ten seconds.
+ */
+const QUERY_CONCURRENCY = 12;
 
 export type CallerState = 'inflight' | 'backoff' | 'done' | 'denied' | 'failed';
 
@@ -50,6 +61,23 @@ export interface SwitchboardCaller {
   detail?: string;
 }
 
+/**
+ * A review the desk's adjudicator handed back to a person.
+ *
+ * Read from the DESK namespace, unlike everything else here — an escalation is
+ * the one part of the segment that exists only on the handler's side, because the
+ * caller cannot see it and should not be able to.
+ */
+export interface DeskEscalation {
+  /** `review-<caller namespace>`. The id the CLI's `decide` takes. */
+  workflowId: string;
+  /** The caller namespace, recovered from the workflow id. */
+  caller: string;
+  /** What the adjudicator wants a human to settle, from the `pending` Query. */
+  question: string;
+  startedAtMs?: number;
+}
+
 export interface SwitchboardState {
   atMs: number;
   deskNamespace: string;
@@ -57,6 +85,8 @@ export interface SwitchboardState {
   callers: SwitchboardCaller[];
   /** Namespaces probed but silent. Count only — they are not on the ring. */
   silent: number;
+  /** Reviews parked on a human, oldest first — the queue with the buttons on it. */
+  escalations: DeskEscalation[];
   /** Non-fatal problems worth showing in small type rather than throwing. */
   warnings: string[];
 }
@@ -137,13 +167,76 @@ async function readCaller(namespace: string): Promise<SwitchboardCaller | undefi
   };
 }
 
+/** The instructor types a bare namespace name; the data plane wants the full id. */
+export function resolveDeskNamespace(deskNamespace: string): string {
+  const trimmed = deskNamespace.trim();
+  return trimmed.includes('.') ? trimmed : `${trimmed}.${config().TRAINING_ACCOUNT_ID}`;
+}
+
+/**
+ * The reviews currently parked on a human, discovered rather than tracked.
+ *
+ * Each RUNNING `ReviewWorkflow` is asked its `pending` Query, which answers with
+ * the adjudicator's question or null. A Query needs a live Worker, so this
+ * returns nothing at all while the desk is stopped for round 4 — correctly: you
+ * cannot approve an escalation on a desk that is not running, and the parked
+ * review is still there when it comes back.
+ */
+export async function readEscalations(deskNamespace: string): Promise<DeskEscalation[]> {
+  const reader = await namespaceReader(resolveDeskNamespace(deskNamespace));
+  if (!reader) return [];
+
+  const running = await reader.listWorkflows(
+    `WorkflowType = "${HANDLER_WORKFLOW_TYPE}" AND ExecutionStatus = "Running"`,
+    ESCALATION_LIMIT,
+  );
+
+  const asked = await mapWithLimit<
+    (typeof running)[number],
+    DeskEscalation | undefined
+  >(running, QUERY_CONCURRENCY, async (wf) => {
+    const question = await reader.queryText(wf.workflowId, 'pending');
+    if (!question) return undefined;
+    return {
+      workflowId: wf.workflowId,
+      caller: wf.workflowId.replace(/^review-/, ''),
+      question,
+      startedAtMs: wf.startedAtMs,
+    };
+  });
+
+  return asked
+    .filter((e): e is DeskEscalation => e !== undefined)
+    .sort((a, b) => (a.startedAtMs ?? 0) - (b.startedAtMs ?? 0));
+}
+
+/**
+ * Clear one escalation. The instructor-screen equivalent of
+ * `uv run --group desk lab4_review.py decide <id> approve`.
+ *
+ * The desk's workflow has been parked on `wait_condition`, possibly for minutes:
+ * this Signal is the whole of what un-parks it, and the caller — who never knew a
+ * person was involved — simply has its result a moment later.
+ */
+export async function decideEscalation(
+  deskNamespace: string,
+  workflowId: string,
+  outcome: 'approve' | 'decline',
+  note: string,
+  by: string,
+): Promise<void> {
+  await signalHumanDecision(resolveDeskNamespace(deskNamespace), workflowId, {
+    outcome,
+    note,
+    by,
+  });
+}
+
 export async function readSwitchboard(deskNamespace: string): Promise<SwitchboardState> {
   const cfg = config();
   const warnings: string[] = [];
 
-  const desk = deskNamespace.includes('.')
-    ? deskNamespace
-    : `${deskNamespace}.${cfg.TRAINING_ACCOUNT_ID}`;
+  const desk = resolveDeskNamespace(deskNamespace);
 
   let candidates: string[] = [];
   try {
@@ -157,7 +250,20 @@ export async function readSwitchboard(deskNamespace: string): Promise<Switchboar
     );
   }
 
-  const results = await mapWithLimit(candidates, CONCURRENCY, readCaller);
+  const [results, escalations] = await Promise.all([
+    mapWithLimit(candidates, CONCURRENCY, readCaller),
+    // A desk namespace that cannot be read is not fatal: the ring is built from
+    // the callers, and an escalation queue that is briefly unavailable — because
+    // the desk is stopped — is a true statement about the desk.
+    readEscalations(desk).catch((err) => {
+      warnings.push(
+        `Could not read the desk's escalation queue: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return [] as DeskEscalation[];
+    }),
+  ]);
   const callers = results.filter((c): c is SwitchboardCaller => c !== undefined);
 
   // Arrival order. This, not the desk's own counter, is the authoritative
@@ -169,6 +275,7 @@ export async function readSwitchboard(deskNamespace: string): Promise<Switchboar
     deskNamespace: desk,
     callers,
     silent: candidates.length - callers.length,
+    escalations,
     warnings,
   };
 }

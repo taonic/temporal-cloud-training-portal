@@ -138,7 +138,7 @@ const schema = z.object({
   // ---- Session 1 lab ---------------------------------------------------
   LAB_NAMESPACE_PREFIX: z.string().default('training-'),
   /** Verify against `GetRegions` via `pnpm ops:preflight` — ids look like `aws-us-west-2`. */
-  LAB_REQUIRED_REGION: z.string().default('azure-australiaeast'),
+  LAB_REQUIRED_REGION: z.string().default('aws-ap-southeast-2'),
   LAB_REQUIRED_SEARCH_ATTRIBUTE: z.string().default('provisioner'),
 });
 

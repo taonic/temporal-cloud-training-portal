@@ -1,26 +1,34 @@
 """Connection setup shared by every command.
 
-Three ways to connect, and the flags pick between them:
+Two ways to connect, and one flag picks between them:
 
     (default)   your Temporal Cloud namespace, from .env
     --local     `temporal server start-dev` on 127.0.0.1, no credentials
-    --proxy     temporal-proxy on 127.0.0.1 (Lab 4), no credentials either
+
+Any of the three settings can also be overridden per invocation, which is how
+the Risk Desk gets pointed at a namespace nobody has written into a file:
+
+    --address <host:port>   --namespace <ns.account>   --api-key <key>
+
+An override beats the file, and the file beats an exported variable. Whatever
+you override is not then required from the environment, so all three together
+run with no .env present at all.
 """
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Sequence
 
-from temporalio.client import Client
+from temporalio.client import Client, Plugin
 from temporalio.runtime import PrometheusConfig, Runtime, TelemetryConfig
 
 TASK_QUEUE = "training-starter"
-DEPLOYMENT_NAME = "training-workers"
 
 
 class MissingSetting(Exception):
-    """Raised instead of KeyError so main.py can print something a human can act on."""
+    """Raised instead of KeyError so an entrypoint can print something a human can act on."""
 
 
 def load_dotenv(filename: str = ".env") -> None:
@@ -78,7 +86,7 @@ def _require(name: str) -> str:
 
 
 def build_runtime(metrics_port: str | None) -> Runtime | None:
-    """Lab 5. Metric NAMES depend on these two options, and getting them wrong
+    """Lab 3. Metric NAMES depend on these two options, and getting them wrong
     produces empty graphs with no error — Prometheus cannot tell you that a
     metric name never existed.
 
@@ -116,11 +124,13 @@ async def connect(
     *,
     metrics_port: str | None = None,
     local: bool = False,
-    proxy: bool = False,
     env_file: str = ".env",
     namespace_override: str | None = None,
+    address_override: str | None = None,
+    api_key_override: str | None = None,
+    plugins: Sequence[Plugin] = (),
 ) -> Client:
-    # The Rate Desk handler connects to the INSTRUCTOR's namespace, not the
+    # The Risk Desk handler connects to the INSTRUCTOR's namespace, not the
     # student's, so `desk` reads .env.desk instead. Two credentials for two sides
     # of a boundary is the honest shape — the same reason Session 2 keeps the
     # Worker's key out of the admin's shell.
@@ -132,36 +142,76 @@ async def connect(
         load_dotenv()
     load_dotenv(env_file)
 
-    # --local points at `temporal server start-dev`, so every mode below can be
-    # rehearsed without touching Temporal Cloud or burning a namespace.
-    #
-    # --proxy (Lab 4) points at temporal-proxy on localhost. Note what is
-    # absent: no TLS, no API key, and the SHORT namespace name. The proxy adds
-    # all three on the way to Cloud, which is the entire point of the pattern —
-    # this process carries no connection details and no credentials.
-    if local or proxy:
+    # --local points at `temporal server start-dev`, so every command in every
+    # lab can be rehearsed without touching Temporal Cloud or burning a
+    # namespace. It is also how the Nexus lab runs both sides on one machine.
+    # An explicit flag beats a file, which beats an exported variable. Note the
+    # order this is written in: a setting that was OVERRIDDEN is never required
+    # from the environment, so `--address … --namespace … --api-key …` works
+    # with no .env file present at all. That is the whole point of the overrides
+    # — the desk has to be runnable against an arbitrary namespace by someone
+    # who has not edited a file on this machine.
+    if local:
         address = "127.0.0.1:7233"
-        namespace = "default" if local else _require("TEMPORAL_NAMESPACE").split(".")[0]
+        namespace = "default"
         api_key = None
     else:
-        address = _require("TEMPORAL_ADDRESS")
-        namespace = _require("TEMPORAL_NAMESPACE")
-        api_key = _require("TEMPORAL_API_KEY")
+        address = address_override or _require("TEMPORAL_ADDRESS")
+        namespace = namespace_override or _require("TEMPORAL_NAMESPACE")
+        api_key = api_key_override or _require("TEMPORAL_API_KEY")
 
-    # --namespace wins over all of the above. It exists for the Nexus rehearsal,
-    # which is the one case that runs several namespaces on one machine: a dev
-    # server needs a caller namespace and a handler namespace side by side, and
-    # `--local` alone can only ever mean `default`. In Cloud nobody passes it —
-    # .env carries the namespace and this stays None.
+    if address_override:
+        address = address_override
+    if api_key_override:
+        api_key = api_key_override
+
+    # --namespace wins over all of the above, --local included. It exists for
+    # the Nexus rehearsal, which is the one case that runs several namespaces on
+    # one machine: a dev server needs a caller namespace and a handler namespace
+    # side by side, and `--local` alone can only ever mean `default`.
     if namespace_override:
         namespace = namespace_override
 
-    print(f"Connecting to {address} ({namespace})")
+    # TLS follows the ADDRESS rather than the flag, because those can now
+    # disagree. `--local` means loopback and no TLS; an explicit `--address`
+    # means whatever that address is, so pointing the desk at Cloud without
+    # editing a file works, and so does pointing it at a dev server on another
+    # port. Deciding this from `--local` alone would have silently offered a
+    # plaintext handshake to Temporal Cloud, which fails in a way that reads as
+    # a credential problem.
+    if address_override:
+        tls = not address.startswith(("127.0.0.1", "localhost", "[::1]"))
+    else:
+        tls = not local
 
+    # Name the flags that beat the file. `load_dotenv` has already announced
+    # "this file wins" about the environment, and without this line the next
+    # thing on screen is a connection to somewhere the file does not mention —
+    # which reads as a bug rather than as the override doing its job.
+    overridden = [
+        name
+        for name, value in (
+            ("--address", address_override),
+            ("--namespace", namespace_override),
+            ("--api-key", api_key_override),
+        )
+        if value
+    ]
+    if overridden:
+        print(f"  {', '.join(overridden)} on the command line — these win over any file")
+
+    print(f"Connecting to {address} ({namespace}){'' if tls else ' — no TLS'}")
+
+    # `plugins` is empty for every command except the Risk Desk, which passes
+    # Pydantic AI's. A plugin can replace the data converter and the workflow
+    # runner, so it belongs on the CLIENT rather than being bolted onto each
+    # Worker — that is what keeps the desk's Workers down to a task queue and a
+    # list of workflows.
     return await Client.connect(
         address,
         namespace=namespace,
         api_key=api_key,
-        tls=not (local or proxy),
+        tls=tls,
         runtime=build_runtime(metrics_port),
+        plugins=list(plugins),
     )

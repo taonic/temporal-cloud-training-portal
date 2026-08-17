@@ -67,11 +67,11 @@ This sandbox is where you *run* things.
 |---|---|
 | Labs | `/workspace/workshop/labs` — `terraform init` is already done |
 | Editor | the **Editor** tab (code-server), opened on the lab directory |
-| Grafana / Prometheus | the tabs above — dark until you run `obs-up` in Session 5 |
+| Grafana / Prometheus | the tabs above — dark until you run `obs-up` in Session 3 |
 
 `workshop-help` reprints the command list. `labs` and `worker` cd into the lab
 directories; `rw` and `rs` run the worker and start a workflow, and they take the
-same flags the session pages show — `rw --version 2.0` from Session 3 on.
+same flags the session pages show.
 
 ### One warning
 

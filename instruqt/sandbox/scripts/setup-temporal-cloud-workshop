@@ -64,7 +64,7 @@ done
 # from config.yml's environment block; tr strips the carriage return a token
 # pasted from Windows carries into the UI.
 LAB_REPO_URL="${LAB_REPO_URL:-https://github.com/taonic/temporal-cloud-training-portal.git}"
-LAB_REPO_REF="${LAB_REPO_REF:-main}"
+LAB_REPO_REF="${LAB_REPO_REF:-taonic/python}"
 set +x   # xtrace would print the token into the Instruqt setup log
 LAB_REPO_TOKEN="$(printf '%s' "${LAB_REPO_TOKEN:-}" | tr -d '\r\n')"
 set -x
@@ -353,7 +353,20 @@ case "$REPO_PATH" in
     */*) ;;
     *) echo "ERROR: LAB_REPO_URL is not a github.com https URL: $LAB_REPO_URL"; exit 1 ;;
 esac
-TARBALL_URL="https://api.github.com/repos/$REPO_PATH/tarball/$LAB_REPO_REF"
+# A branch name containing a slash — taonic/python, the default above — has to be
+# FULLY QUALIFIED on this endpoint. `tarball/taonic/python` is ambiguous to GitHub
+# and answers 504, which reads like an outage rather than like a malformed ref;
+# `tarball/refs/heads/taonic/python` redirects to the archive as intended. So
+# qualify it here rather than making every track config remember to.
+#
+# Only branches are assumed. A TAG whose name contains a slash must be given
+# already-qualified, as refs/tags/<name>, and passes through untouched.
+case "$LAB_REPO_REF" in
+    refs/*)  TARBALL_REF="$LAB_REPO_REF" ;;
+    */*)     TARBALL_REF="refs/heads/$LAB_REPO_REF" ;;
+    *)       TARBALL_REF="$LAB_REPO_REF" ;;
+esac
+TARBALL_URL="https://api.github.com/repos/$REPO_PATH/tarball/$TARBALL_REF"
 
 # xtrace off around every line that touches the token, same reasoning as the
 # clone this replaced: the setup log is readable by anyone debugging the track.
@@ -369,6 +382,7 @@ set -x
 
 if [ "$FETCH_OK" -ne 1 ]; then
     echo "ERROR: could not fetch $LAB_REPO_URL (ref $LAB_REPO_REF)."
+    echo "       Tried: $TARBALL_URL"
     if [ -z "$LAB_REPO_TOKEN" ]; then
         echo "       No LAB_REPO_TOKEN was set — a private repo needs one."
     else
@@ -453,7 +467,7 @@ printf 'WORKER_STACK=%s\n' "$WORKER_STACK" > /etc/workshop-stack
 # usable on the day.
 if [ "$HAS_PYTHON" = 1 ]; then
     # Create labs/worker/.venv from the committed uv.lock here, and the student's
-    # first `uv run main.py worker` starts in about a second instead of resolving
+    # first `uv run lab1_hello.py worker` starts in about a second instead of resolving
     # and downloading temporalio.
     #
     # --locked first: it asserts uv.lock is in sync with pyproject.toml, and the
@@ -756,10 +770,10 @@ echo
 echo "Outbound network (PREREQUISITES.md 'most likely to be blocked')"
 # The address every lab actually dials is <namespace>.<account>.tmprl.cloud:7233,
 # which does not exist until Session 1 creates it. So probe the regional endpoint
-# for the region the labs pin (azure-australiaeast): same port, same cloud, and it
+# for the region the labs pin (aws-ap-southeast-2): same port, same cloud, and it
 # resolves before anyone has provisioned anything.
-if nc -z -w 5 australiaeast.azure.api.temporal.io 7233 2>/dev/null; then
-    ok "gRPC to Temporal Cloud on 7233 (azure australiaeast)"
+if nc -z -w 5 ap-southeast-2.aws.api.temporal.io 7233 2>/dev/null; then
+    ok "gRPC to Temporal Cloud on 7233 (aws ap-southeast-2)"
 else
     bad "gRPC to Temporal Cloud on 7233 — nothing in this workshop connects"
 fi
@@ -825,19 +839,21 @@ chmod +x /usr/local/bin/workshop-check
 # ─── Worker dispatcher ────────────────────────────────────────────────────────
 # One command that means the same thing whichever stack labs/worker ships:
 #
-#   worker-run worker --version 2.0     ->  uv run main.py worker --version 2.0
-#                                       or  dotnet run -- worker --version 2.0
+#   worker-run lab1_hello.py worker   ->  uv run lab1_hello.py worker
+#                                     or  dotnet run -- lab1_hello worker
 #
-# The two workers take an identical command surface — worker, start, load, chaos,
-# and the same flags — so everything downstream of this line (rw, rs, rm5, the
-# banner, the session pages) is stack-agnostic. What it deliberately does NOT do
-# is hide which one ran: it prints the real command first, because a student
-# comparing the sandbox against the session page needs to see the same words.
+# The Python starter has one entrypoint per lab (lab1_hello.py, lab3_metrics.py,
+# lab4_review.py, lab5_chaos.py), so the script name is the FIRST argument rather
+# than something this helper picks. That keeps it stack-agnostic and keeps the
+# words identical to the session page — which is the whole point of it. What it
+# deliberately does NOT do is hide which one ran: it prints the real command
+# first, because a student comparing the sandbox against the page needs to see
+# the same words.
 cat > /usr/local/bin/worker-run <<'EOF'
 #!/bin/bash
 # Run a labs/worker command on whichever stack the lab repo shipped.
 #
-#   worker-run <worker|start|load|chaos> [flags...]
+#   worker-run <script> <command> [flags...]
 #
 # Stack selection, in order: an exported WORKER_STACK, then the value the preset
 # recorded in /etc/workshop-stack, then detection (pyproject.toml, then *.csproj).
@@ -868,11 +884,15 @@ fi
 case "$stack" in
     python)
         [ -f pyproject.toml ] || { echo "ERROR: WORKER_STACK=python but there is no pyproject.toml in $WORKER_DIR." >&2; exit 1; }
-        echo "+ uv run main.py $*"
-        exec uv run main.py "$@"
+        echo "+ uv run $*"
+        exec uv run "$@"
         ;;
     dotnet)
         compgen -G '*.csproj' > /dev/null || { echo "ERROR: WORKER_STACK=dotnet but there is no .csproj in $WORKER_DIR." >&2; exit 1; }
+        # The .NET starter keeps a single entrypoint, so drop the .py script
+        # name the Python side needs and pass the rest through.
+        first="${1:-}"
+        case "$first" in *.py) shift ;; esac
         echo "+ dotnet run -- $*"
         exec dotnet run -- "$@"
         ;;
@@ -1098,7 +1118,7 @@ set -euo pipefail
 
 WORKSHOP_DIR="${WORKSHOP_DIR:-/workspace/workshop}"
 LABS="$WORKSHOP_DIR/labs"
-REGION="${LAB_REQUIRED_REGION:-azure-australiaeast}"
+REGION="${LAB_REQUIRED_REGION:-aws-ap-southeast-2}"
 
 N="${1:-}"
 case "$N" in
@@ -1264,7 +1284,7 @@ EOF
 # per invocation: the banner should tell a student which worker they have before
 # they discover it from an error message.
 case "$WORKER_STACK" in
-    python) WORKER_RUN_EXAMPLE='uv run main.py worker' ;;
+    python) WORKER_RUN_EXAMPLE='uv run lab1_hello.py worker' ;;
     dotnet) WORKER_RUN_EXAMPLE='dotnet run -- worker' ;;
     # Unreachable — the detection above exits on anything else. Present so the
     # heredoc below cannot fail on an unset variable under `set -u`.
@@ -1369,7 +1389,7 @@ fi
 grep -qx "WORKER_STACK=$WORKER_STACK" /etc/workshop-stack \
     || { echo "ERROR: /etc/workshop-stack does not record $WORKER_STACK"; exit 1; }
 
-for f in lab1.tf lab2.tf lab5.tf lab6.tf lab7.tf proxy/config.yaml observability/docker-compose.yml; do
+for f in lab1.tf lab2.tf lab5.tf proxy/config.yaml observability/docker-compose.yml; do
     [ -f "$WORKSHOP_DIR/labs/$f" ] || { echo "ERROR: missing lab file: labs/$f"; exit 1; }
 done
 
@@ -1410,7 +1430,7 @@ egress() {
 # The endpoint the labs actually dial is <namespace>.<account>.tmprl.cloud:7233 and
 # no namespace exists at build time, so this probes the regional endpoint for the
 # region lab1.tf pins. It proves port 7233 is open outbound, in the right cloud.
-egress australiaeast.azure.api.temporal.io:7233 "outbound gRPC on 7233 is blocked from this sandbox"
+egress ap-southeast-2.aws.api.temporal.io:7233 "outbound gRPC on 7233 is blocked from this sandbox"
 egress saas-api.tmprl.cloud:443                 "cannot reach the Cloud Ops API on 443"
 
 echo "All health checks passed. Preset setup complete."

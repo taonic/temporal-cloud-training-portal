@@ -34,15 +34,6 @@ const KIND_ORDER: ResourceKind[] = [
   'nexusEndpoint',
 ];
 
-const DISPOSITION_TONE = {
-  deleted: 'bad',
-  'would-delete': 'warn',
-  'in-open-window': 'info',
-  'outside-any-window': 'warn',
-  'unknown-age': 'neutral',
-  'delete-failed': 'bad',
-} as const;
-
 export function Mirror({ token }: { token: string }) {
   const [data, setData] = useState<MirrorPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +122,15 @@ export function Mirror({ token }: { token: string }) {
           </p>
         )}
 
+        {/* Kept when the sweep report went: this is not a report of what the
+            sweeper did, it is a list of things nobody will clean up for you. */}
+        {(data.registry?.drift.length ?? 0) > 0 && (
+          <p className="mb-3 rounded-lg border border-warning-border/30 bg-warning/[0.08] px-3.5 py-2.5 text-sm text-warning">
+            {data.registry!.drift.length} resource(s) exist outside every access window. The sweeper
+            will not touch these — clean them up by hand if they are workshop debris.
+          </p>
+        )}
+
         <dl className="grid gap-4 text-sm sm:grid-cols-3">
           <div>
             <dt className="label mb-1">Baseline</dt>
@@ -199,40 +199,6 @@ export function Mirror({ token }: { token: string }) {
         </div>
       </section>
 
-      {/* Sweeper ---------------------------------------------------------- */}
-      {sweep && (
-        <section className="card p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-white">Last sweep</h2>
-            <span className="text-xs text-content-faint">{relative(sweep.atMs, data.atMs)}</span>
-          </div>
-
-          {sweep.decisions.length === 0 ? (
-            <p className="text-sm text-content-subtle">
-              Nothing outside the baseline. {sweep.inventorySize} resources inspected.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {sweep.decisions.map((d) => (
-                <li
-                  key={`${d.kind}:${d.id}`}
-                  className="flex items-center justify-between gap-3 rounded-md border border-line-subtle/40 bg-surface-table/25 px-3 py-2 text-sm"
-                >
-                  <span className="min-w-0 truncate text-content-body">{d.label}</span>
-                  <Badge tone={DISPOSITION_TONE[d.disposition]}>{d.disposition}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {(data.registry?.drift.length ?? 0) > 0 && (
-            <p className="mt-4 rounded-lg border border-warning-border/30 bg-warning/[0.08] px-3.5 py-2.5 text-sm text-warning">
-              {data.registry!.drift.length} resource(s) exist outside every access window. The
-              sweeper will not touch these — clean them up by hand if they are workshop debris.
-            </p>
-          )}
-        </section>
-      )}
     </div>
   );
 }

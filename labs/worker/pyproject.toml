@@ -1,16 +1,30 @@
 [project]
 name = "training-starter"
 version = "0.1.0"
-description = "Training starter worker — Labs 1 and 3 to 6 of the Temporal Cloud platform workshop."
-requires-python = ">=3.9"
+description = "Training starter worker — Labs 1, 3, 4 and 5 of the Temporal Cloud platform workshop."
+requires-python = ">=3.10"
 dependencies = [
     "temporalio>=1.18.0",
 ]
 
+# The Risk Desk (Lab 4) is the instructor's side and the ONLY thing that needs
+# an agent framework. Keeping it in a group rather than in `dependencies` is
+# deliberate: a student's `uv run lab1_hello.py worker` resolves one package, not
+# forty, and stays offline-safe once the sandbox image has warmed the cache.
+# Nothing a student runs imports `training.lab4_agents` or `training.lab4_desk`,
+# and `lab4_review.py` imports them inside the command rather than at the top of
+# the file so that stays true.
+#
+#   uv run --group desk lab4_review.py desk
+[dependency-groups]
+desk = [
+    "pydantic-ai-slim[anthropic,temporal]>=2.31.0",
+]
+
 # Not a package. There is nothing here to install or distribute — `training/`
-# is imported from the working directory by `main.py` sitting next to it, and
+# is imported from the working directory by the lab entrypoints sitting next to it, and
 # declaring it a package would make `uv run` build a wheel on every invocation
-# for no benefit. This one line is why `uv run main.py worker` starts in about a
+# for no benefit. This one line is why `uv run lab1_hello.py worker` starts in about a
 # second rather than rebuilding.
 [tool.uv]
 package = false

@@ -39,15 +39,14 @@ and the Docker image pulls are all done at build time, so Session 1 starts at
 | Terraform 1.15.8 | Sessions 1, 2 |
 | Python 3.12 + uv 0.12.5 | Sessions 1, 3–6 (`labs/worker`) |
 | .NET SDK 8 | Sessions 1, 3–6 (`labs/worker`) |
-| Docker + Compose v5.4.0 | Sessions 4, 5 |
-| `temporalio/temporal-proxy:v0.4.1` | Session 4 |
-| `prom/prometheus:v3.1.0` + `grafana/grafana:11.5.1` | Session 5 |
+| Docker + Compose v5.4.0 | Sessions 7, 5 |
+| `prom/prometheus:v3.1.0` + `grafana/grafana:11.5.1` | Session 3 |
 | code-server 4.131.0 on `:8443` | all sessions |
 | `labs/` extracted to `/workspace/workshop/labs` | all sessions |
 
 Every download that publishes a checksum manifest is verified against it before
 install. Helpers on `PATH`: `workshop-creds`, `workshop-check`, `workshop-help`,
-`worker-run`, `proxy-up`, `obs-up`/`obs-down` (aliases),
+`worker-run`, `obs-up`/`obs-down` (aliases),
 `dev-server-up`/`dev-server-down`, and `restore-labs` (instructor-only — see
 Recovery).
 
@@ -66,8 +65,7 @@ instead, and the build fails loudly if the named stack is not in the repo.
 identical command surface — `worker`, `start`, `load`, `chaos`, same flags:
 
 ```bash
-worker-run worker --version 2.0    # -> uv run main.py worker --version 2.0
-                                   # or dotnet run -- worker --version 2.0
+worker-run worker                  # -> uv run lab1_hello.py worker
 WORKER_STACK=dotnet rw             # override for one command
 ```
 
@@ -76,11 +74,6 @@ against their session page sees the same words the page does.
 
 `rw`, `rs`, `rl` and `rm5` are **shell functions** rather than aliases, which is
 not cosmetic: an alias appends what you typed after the closing paren, so
-`rw --version 2.0` used to expand to `(cd … && dotnet run -- worker) --version 2.0`
-and drop the flag. From Lab 3 on, a worker without `--version` is handed no tasks
-at all and fails silently — the most expensive twenty minutes available in this
-workshop.
-
 uv's paths are pinned rather than left under `$HOME`, and set identically in
 `/etc/environment`, `~/.bashrc` and the `code-server` unit — a path that resolves
 differently in a systemd-launched terminal than in the build script is a path
@@ -107,7 +100,7 @@ unused, so a stack switch in the lab repo needs no preset change.
 ## Recovery
 
 The workshop is six sessions in one day, in one sandbox, with nothing persisted
-outside it. A sandbox that dies at Session 4 leaves the student's Cloud resources
+outside it. A sandbox that dies at Session 5 leaves the student's Cloud resources
 intact and every line of Terraform they wrote gone — and re-pasting it from four
 session pages in front of a waiting room is not a recovery.
 
@@ -119,8 +112,8 @@ restore-labs 4                    # namespace from workshop-creds
 restore-labs 4 training-someone   # or name it explicitly
 ```
 
-Only `lab1.tf` and `lab2.tf` are ever student-authored — Sessions 3 and 4 add no
-Cloud resources, and Sessions 5 and 6 only add a key to `lab1.tf`'s tag block. The
+Only `lab1.tf` and `lab2.tf` are ever student-authored — Sessions 6 and 4 add no
+Cloud resources, and Sessions 3 and 6 only add a key to `lab1.tf`'s tag block. The
 per-student names are sentinels in the snapshots (`__NAMESPACE_NAME__` and four
 others); `restore-labs` derives all of them from the namespace short name exactly
 as the portal's `naming.ts` does, so it only ever has to be told that one value.
@@ -131,8 +124,7 @@ Three things it deliberately does **not** do, and prints instead:
   Cloud and Terraform does not know it, so they must be imported before the next
   apply. The API key is the exception — its secret cannot be imported, so let
   Terraform create a new one and delete the old key in the UI.
-- **`labs/proxy/config.yaml`.** Session 4's edit is an uncomment, not Terraform.
-- **Session 5/6 tag values.** Those are the student's own dashboard and runbook
+- **Session 3/6 tag values.** Those are the student's own dashboard and runbook
   links. The snapshots carry `RESTORED — replace with…` placeholders, which are
   non-empty (so the checkpoint passes) and obviously not real (so they get fixed).
 
@@ -150,13 +142,12 @@ tabs.
 | Port | Service |
 |---|---|
 | 8443 | code-server (https, `--auth none`) |
-| 3030 | Grafana (Session 5) |
-| 9090 | Prometheus (Session 5) |
+| 3030 | Grafana (Session 3) |
+| 9090 | Prometheus (Session 3) |
 | 9464 | worker SDK metrics — optional; Prometheus scrapes it internally |
 | 8233 | local dev-server UI — fallback only, unit ships disabled |
 
 The local dev server is installed but **disabled on purpose**: it binds 7233,
-which Session 4's `temporal-proxy` needs.
 
 ## Knobs
 
@@ -166,9 +157,8 @@ defaults.
 | Variable | Default | Notes |
 |---|---|---|
 | `LAB_REPO_URL` | `https://github.com/taonic/temporal-cloud-training-portal.git` | repo holding `labs/` |
-| `LAB_REPO_REF` | `main` | |
+| `LAB_REPO_REF` | `taonic/python` | branch, tag or SHA. A slashed branch name is qualified to `refs/heads/…` before it reaches GitHub's tarball endpoint, which 504s on the bare form |
 | `WORKSHOP_DIR` | `/workspace/workshop` | clone target; code-server opens it |
-| `TEMPORAL_ACCOUNT` | `bvmon` | bare account id, used by `proxy-up` |
 | `WORKER_STACK` | *empty* | `python` \| `dotnet`. Empty detects from `labs/worker`; see above |
 | `TEMPORAL_CLI_VERSION` | `1.8.2` | |
 | `TERRAFORM_VERSION` | `1.15.8` | |
@@ -228,25 +218,3 @@ keeps xtrace off around every line that touches it. The API tarball endpoint tak
 the token as an `Authorization: Bearer` header rather than in the URL, so there is
 no tokenized URL to leak into the log in the first place.
 
-## Before the first build
-
-1. `labs/proxy/README.md` still tells students to pull
-   `temporalio/temporal-proxy:latest`. The setup tags the pinned image as
-   `latest` locally so that command hits the cache, but the README is worth
-   changing to the pinned tag.
-2. Validate with `instruqt sandbox push` against a draft — `instruqt track
-   validate` only covers tracks (`track.yml` + challenges), not presets.
-3. Then launch it for real and run **Session 1** and **Session 5** end to end as a
-   student. Session 1 proves Terraform can create an `azure-australiaeast`
-   namespace from inside the sandbox and that the portal grades it green; Session
-   5 is the heaviest thing the VM does (worker + Prometheus + Grafana at once).
-   The build-time health checks cannot tell you either of those.
-
-## Egress probes
-
-The address every lab dials is `<namespace>.<account>.tmprl.cloud:7233`, which
-does not exist until Session 1 creates it — so nothing at build time can probe the
-real endpoint. Both `workshop-check` and the closing health checks use
-`australiaeast.azure.api.temporal.io:7233` instead: same port, same cloud, same
-region as `lab1.tf` pins, and it resolves before anyone has provisioned anything.
-It proves 7233 is open outbound, which is the failure that would kill Sessions 3–6.

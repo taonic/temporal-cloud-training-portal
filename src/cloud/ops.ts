@@ -337,6 +337,71 @@ export async function listNexusEndpoints(): Promise<CloudNexusEndpoint[]> {
   return callPaginated<CloudNexusEndpoint>('getNexusEndpoints', {}, (r) => r?.endpoints);
 }
 
+/**
+ * The endpoint spec, in wire shape.
+ *
+ * `policy_specs` is the caller allowlist and it is a COMPLETE list: whatever
+ * you send replaces what is there. An update that omits a caller revokes them,
+ * which is exactly what makes "set the roster to whoever exists right now"
+ * expressible as one call — and exactly what would silently lock the room out
+ * if you built the list from a stale read.
+ */
+export function nexusEndpointSpec(args: {
+  name: string;
+  targetNamespaceId: string;
+  targetTaskQueue: string;
+  allowedNamespaceIds: string[];
+}) {
+  return {
+    name: args.name,
+    target_spec: {
+      worker_target_spec: {
+        namespace_id: args.targetNamespaceId,
+        task_queue: args.targetTaskQueue,
+      },
+    },
+    policy_specs: args.allowedNamespaceIds.map((namespace_id) => ({
+      allowed_cloud_namespace_policy_spec: { namespace_id },
+    })),
+  };
+}
+
+export type NexusEndpointSpec = ReturnType<typeof nexusEndpointSpec>;
+
+export async function createNexusEndpoint(args: {
+  spec: NexusEndpointSpec;
+  asyncOperationId: string;
+}): Promise<{ endpointId?: string; operation?: AsyncOperation }> {
+  const res = await call<any>('createNexusEndpoint', {
+    spec: args.spec,
+    async_operation_id: args.asyncOperationId,
+  });
+  return { endpointId: res?.endpoint_id, operation: res?.async_operation };
+}
+
+export async function updateNexusEndpoint(args: {
+  endpointId: string;
+  spec: NexusEndpointSpec;
+  resourceVersion: string;
+  asyncOperationId: string;
+}): Promise<AsyncOperation | undefined> {
+  const res = await call<any>('updateNexusEndpoint', {
+    endpoint_id: args.endpointId,
+    spec: args.spec,
+    // Optimistic concurrency. Sending the version we read is what turns "two
+    // people setting the allowlist at once" into a loud failure rather than one
+    // roster silently overwriting the other.
+    resource_version: args.resourceVersion,
+    async_operation_id: args.asyncOperationId,
+  });
+  return res?.async_operation;
+}
+
+export async function getAsyncOperation(id: string): Promise<AsyncOperation | undefined> {
+  const res = await call<any>('getAsyncOperation', { async_operation_id: id });
+  return res?.async_operation;
+}
+
 export async function deleteNexusEndpoint(args: {
   endpointId: string;
   resourceVersion?: string;

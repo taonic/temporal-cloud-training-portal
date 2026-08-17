@@ -62,44 +62,17 @@ export interface PendingNexusOperation {
   lastFailure?: string;
 }
 
-export interface DeploymentSummary {
-  name: string;
-  /** Build IDs currently tracked in the deployment. */
-  versions: string[];
-  /** Build ID currently receiving new executions, if any. */
-  currentBuildId?: string;
-}
-
-export interface PayloadSample {
-  workflowId: string;
-  /** Distinct `encoding` values on the workflow's input payloads. */
-  encodings: string[];
-  /** Every distinct metadata key seen on those payloads, `encoding` included. */
-  metadataKeys: string[];
-}
-
 export interface NamespaceReader {
   namespaceId: string;
   countWorkflows(query: string): Promise<number>;
   listWorkflows(query: string, limit?: number): Promise<WorkflowSummary[]>;
   pollerCount(taskQueue: string): Promise<number>;
-  workerDeployment(name: string): Promise<DeploymentSummary | undefined>;
-  /**
-   * Reads the `encoding` metadata off recent workflows' input payloads.
-   *
-   * This is how Session 2 proves ciphertext-only egress rather than taking a
-   * student's word for it: a payload sealed by temporal-proxy is tagged
-   * `binary/encrypted`, an ordinary one `json/plain`. History is fetched raw,
-   * with no data converter, so nothing here attempts to decrypt anything — and
-   * nothing could, since the portal holds no key.
-   */
-  payloadEncodings(limit?: number): Promise<PayloadSample[]>;
   /** Pending Nexus Operations on one workflow. Empty once the call has resolved. */
   pendingNexusOperations(workflowId: string): Promise<PendingNexusOperation[]>;
   /**
    * What a workflow's history says about its Nexus operations.
    *
-   * This is how Session 6 proves a call actually crossed a namespace boundary
+   * This is how Session 4 proves a call actually crossed a namespace boundary
    * rather than taking the student's word for it. `NexusOperationCompleted` in
    * the CALLER's history can only have been written by the caller's Nexus
    * Machinery after a handler in another namespace answered — the student cannot
@@ -109,10 +82,20 @@ export interface NamespaceReader {
   nexusOutcomes(query: string, limit?: number): Promise<NexusOutcome[]>;
   /** Why a closed workflow failed. Undefined if it did not, or if history is unreadable. */
   failureMessage(workflowId: string): Promise<string | undefined>;
+  /**
+   * A no-argument Query that answers with a string or null — the shape the Risk
+   * Desk's `pending` Query uses to report what a review is waiting for.
+   *
+   * Undefined when the answer is null, when the workflow has closed, or when
+   * nobody is polling the queue: a Query needs a live Worker, so a stopped desk
+   * makes this unanswerable rather than empty. Callers must not read a failed
+   * Query as "no escalation".
+   */
+  queryText(workflowId: string, queryName: string): Promise<string | undefined>;
 }
 
-/** Set by temporal-proxy on every payload it seals. */
-export const ENCRYPTED_ENCODING = 'binary/encrypted';
+/** How long a Query may take before the answer stops being worth waiting for. */
+const QUERY_TIMEOUT_MS = 3_000;
 
 /** One client per namespace, reused across checkpoints and across students' page loads. */
 const clients = new Map<string, Promise<Client>>();
@@ -169,6 +152,38 @@ function nexusOpState(raw: unknown): string | undefined {
     return raw.replace(/^PENDING_NEXUS_OPERATION_STATE_/, '').replace(/^NEXUS_OPERATION_STATE_/, '');
   }
   return undefined;
+}
+
+/**
+ * The ONE write in this module, deliberately narrow and deliberately named so it
+ * shows up in review — see the security note at the top of the file.
+ *
+ * It sends the Risk Desk's `decide` Signal to one parked `ReviewWorkflow` in the
+ * instructor's own desk namespace, so the escalation in Session 4 round 3 can be
+ * cleared from the instructor screen instead of from the terminal the desk is
+ * printing to. The signal name and payload shape are fixed here rather than
+ * passed in: this cannot be pointed at another signal, and it cannot terminate,
+ * cancel or reset anything.
+ *
+ * `outcome` is narrowed by the type rather than validated, because a signal is
+ * the last place a typo should reach — the desk reads the first letter of the
+ * string, so `"aprove"` would silently approve a payment.
+ */
+export async function signalHumanDecision(
+  namespaceId: string,
+  workflowId: string,
+  decision: { outcome: 'approve' | 'decline'; note?: string; by?: string },
+): Promise<void> {
+  const client = await connect(namespaceId);
+  // The payload is the `HumanDecision` dataclass in labs/worker/training/
+  // lab4_contract.py. Field names have to match: the desk deserialises by type
+  // hint, and an unknown key or a missing one fails inside the workflow rather
+  // than here.
+  await client.workflow.getHandle(workflowId).signal('decide', {
+    outcome: decision.outcome,
+    note: decision.note ?? '',
+    by: decision.by ?? 'instructor',
+  });
 }
 
 /**
@@ -289,6 +304,25 @@ export async function namespaceReader(namespaceId: string): Promise<NamespaceRea
       return undefined;
     },
 
+    async queryText(workflowId, queryName) {
+      try {
+        // Deadline, not just a catch. A Query against a namespace whose Worker
+        // has been stopped does not fail fast, and the caller here is a screen on
+        // a four-second poll — during the Session 4 outage round every parked
+        // review would otherwise hold the whole payload open. This is the round
+        // the screen exists for, so it must stay responsive while it says
+        // nothing.
+        const answer = await client.withDeadline(Date.now() + QUERY_TIMEOUT_MS, () =>
+          client.workflow.getHandle(workflowId).query<string | null>(queryName),
+        );
+        return answer ?? undefined;
+      } catch {
+        // A closed workflow, or no Worker polling the queue. Either way this is
+        // "cannot tell", which the caller must not read as "nothing pending".
+        return undefined;
+      }
+    },
+
     async pollerCount(taskQueue) {
       const res = await client.workflowService.describeTaskQueue({
         namespace: namespaceId,
@@ -299,69 +333,6 @@ export async function namespaceReader(namespaceId: string): Promise<NamespaceRea
       return res.pollers?.length ?? 0;
     },
 
-    async payloadEncodings(limit = 8) {
-      const out: PayloadSample[] = [];
-      const decoder = new TextDecoder();
 
-      for await (const wf of client.workflow.list({
-        query: 'ExecutionStatus = "Completed"',
-      })) {
-        if (out.length >= limit) break;
-        try {
-          // Raw history: no data converter runs, so payloads stay as bytes and
-          // the metadata is readable even though the contents are not.
-          const history = await client.workflow.getHandle(wf.workflowId).fetchHistory();
-          const started = history.events?.find(
-            (e) => e.workflowExecutionStartedEventAttributes != null,
-          )?.workflowExecutionStartedEventAttributes;
-
-          const encodings = new Set<string>();
-          const metadataKeys = new Set<string>();
-          for (const payload of started?.input?.payloads ?? []) {
-            for (const key of Object.keys(payload.metadata ?? {})) metadataKeys.add(key);
-            const raw = payload.metadata?.encoding;
-            if (raw) encodings.add(decoder.decode(raw));
-          }
-          if (encodings.size > 0) {
-            out.push({
-              workflowId: wf.workflowId,
-              encodings: [...encodings],
-              metadataKeys: [...metadataKeys],
-            });
-          }
-        } catch {
-          // A single unreadable history should not fail the whole check.
-        }
-      }
-      return out;
-    },
-
-    async workerDeployment(name) {
-      try {
-        const res = await client.workflowService.describeWorkerDeployment({
-          namespace: namespaceId,
-          deploymentName: name,
-        });
-        const info = res.workerDeploymentInfo;
-        if (!info) return undefined;
-
-        const versions = (info.versionSummaries ?? [])
-          .map((v) => v.deploymentVersion?.buildId ?? v.version ?? '')
-          .filter(Boolean);
-
-        return {
-          name: info.name ?? name,
-          versions,
-          currentBuildId:
-            info.routingConfig?.currentDeploymentVersion?.buildId ??
-            info.routingConfig?.currentVersion ??
-            undefined,
-        };
-      } catch {
-        // NOT_FOUND is the normal answer before the student runs a versioned
-        // worker, and is indistinguishable from the feature being unavailable.
-        return undefined;
-      }
-    },
   };
 }

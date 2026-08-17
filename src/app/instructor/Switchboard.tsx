@@ -1,10 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CallerState, SwitchboardCaller, SwitchboardState } from '@/cloud/nexus';
+import type {
+  CallerState,
+  DeskEscalation,
+  SwitchboardCaller,
+  SwitchboardState,
+} from '@/cloud/nexus';
 
 /**
- * The Rate Desk switchboard, for projecting during the Nexus segment.
+ * The Risk Desk switchboard, for projecting during the Nexus segment.
  *
  * The SVG is drawn imperatively inside a ref rather than as JSX, and that is a
  * deliberate split: the ring animates at 60fps (spokes slide as the ring
@@ -71,6 +76,11 @@ export function Switchboard({ token }: { token: string }) {
   const [desk, setDesk] = useState('');
   const [data, setData] = useState<SwitchboardState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Per-escalation note, keyed by the desk's workflow id. */
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  /** Signals in flight, and ones already sent but not yet gone from the poll. */
+  const [sending, setSending] = useState<Record<string, boolean>>({});
+  const [sent, setSent] = useState<Record<string, 'approve' | 'decline'>>({});
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const spokes = useRef<Map<string, Spoke>>(new Map());
@@ -112,6 +122,48 @@ export function Switchboard({ token }: { token: string }) {
     const timer = setInterval(load, POLL_MS);
     return () => clearInterval(timer);
   }, [desk, load]);
+
+  /* ---- the one write on this page -------------------------------- */
+  /**
+   * Send the desk's `decide` Signal. Exactly what
+   * `lab4_review.py decide <id> approve` does, from the screen already on the
+   * projector — so round 3 does not need a terminal, and the room watches the
+   * parked caller finish instead of watching you type.
+   *
+   * The row is not removed here. It disappears when the poll stops seeing an
+   * answer from the `pending` Query, which is the desk telling us it un-parked
+   * rather than us assuming it did.
+   */
+  const decide = useCallback(
+    async (workflowId: string, outcome: 'approve' | 'decline') => {
+      setSending((prev) => ({ ...prev, [workflowId]: true }));
+      try {
+        const res = await fetch(`/api/nexus?t=${encodeURIComponent(token)}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ns: desk,
+            workflowId,
+            outcome,
+            note: notes[workflowId] ?? '',
+          }),
+        });
+        const payload = await res.json();
+        if (!res.ok) {
+          setError(payload.error ?? `HTTP ${res.status}`);
+          return;
+        }
+        setError(null);
+        setSent((prev) => ({ ...prev, [workflowId]: outcome }));
+        void load();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setSending((prev) => ({ ...prev, [workflowId]: false }));
+      }
+    },
+    [desk, load, notes, token],
+  );
 
   /* ---- scaffolding, built once ----------------------------------- */
   useEffect(() => {
@@ -163,7 +215,7 @@ export function Switchboard({ token }: { token: string }) {
     const h = hub.current;
     if (!l || !h) return;
 
-    h.title.textContent = (data?.deskNamespace ?? desk ?? 'rate-desk').split('.')[0] || 'rate-desk';
+    h.title.textContent = (data?.deskNamespace ?? desk ?? 'risk-desk').split('.')[0] || 'risk-desk';
     h.sub.textContent = 'handler namespace';
 
     const callers = data?.callers ?? [];
@@ -312,6 +364,7 @@ export function Switchboard({ token }: { token: string }) {
 
   /* ---- render ---------------------------------------------------- */
   const callers = data?.callers ?? [];
+  const escalations = data?.escalations ?? [];
   const count = (s: CallerState) => callers.filter((c) => c.state === s).length;
 
   return (
@@ -320,7 +373,7 @@ export function Switchboard({ token }: { token: string }) {
         <div>
           <div className="label mb-1.5">Nexus switchboard</div>
           <p className="max-w-[62ch] text-[13px] leading-6 text-content-secondary">
-            The ring starts empty. Every spoke is a namespace that has called the Rate Desk —
+            The ring starts empty. Every spoke is a namespace that has called the Risk Desk —
             discovered from its own caller workflow, never from a roster.
           </p>
         </div>
@@ -328,9 +381,37 @@ export function Switchboard({ token }: { token: string }) {
           <Counter k="Callers" v={callers.length} tone="neutral" />
           <Counter k="Completed" v={count('done')} tone="good" />
           <Counter k="Backing off" v={count('backoff')} tone="warn" />
+          <Counter k="Escalated" v={escalations.length} tone="warn" />
           <Counter k="Denied" v={count('denied') + count('failed')} tone="bad" />
         </div>
       </div>
+
+      {/* Round 3's queue. Absent until an adjudicator hands one back, and absent
+          again while the desk is stopped — a Query needs a Worker, and a parked
+          review you cannot ask about is still parked. */}
+      {desk && escalations.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-subtle/50 px-4 py-2.5">
+            <div className="label">Waiting on you</div>
+            <span className="font-mono text-[12px] text-content-faint">
+              {escalations.length} parked on a human · nothing is failing
+            </span>
+          </div>
+          <div className="divide-y divide-line-table/50">
+            {escalations.map((e) => (
+              <Escalation
+                key={e.workflowId}
+                escalation={e}
+                note={notes[e.workflowId] ?? ''}
+                onNote={(v) => setNotes((prev) => ({ ...prev, [e.workflowId]: v }))}
+                sending={Boolean(sending[e.workflowId])}
+                sent={sent[e.workflowId]}
+                onDecide={(outcome) => void decide(e.workflowId, outcome)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="card overflow-hidden">
@@ -343,7 +424,7 @@ export function Switchboard({ token }: { token: string }) {
                 value={desk}
                 spellCheck={false}
                 autoComplete="off"
-                placeholder="rate-desk"
+                placeholder="risk-desk"
                 onChange={(e) => setDesk(e.target.value.trim())}
               />
             </label>
@@ -353,7 +434,7 @@ export function Switchboard({ token }: { token: string }) {
             viewBox="0 0 900 620"
             className="block h-auto w-full"
             role="img"
-            aria-label="Namespaces that have called the Rate Desk, arranged around the handler namespace."
+            aria-label="Namespaces that have called the Risk Desk, arranged around the handler namespace."
           />
           <div className="flex flex-wrap gap-4 border-t border-line-subtle/50 px-4 py-3 font-mono text-[11.5px] text-content-secondary">
             <Key colour="#9aa0f5" label="in flight" />
@@ -427,6 +508,87 @@ export function Switchboard({ token }: { token: string }) {
         </p>
       ))}
     </section>
+  );
+}
+
+/**
+ * One parked review, with the two buttons that un-park it.
+ *
+ * The CLI command is printed underneath rather than hidden, for two reasons: the
+ * desk's own terminal prints the same line, so the room can see the button and
+ * the command are one thing; and if the portal is not to hand, that line still
+ * works.
+ */
+function Escalation({
+  escalation,
+  note,
+  onNote,
+  sending,
+  sent,
+  onDecide,
+}: {
+  escalation: DeskEscalation;
+  note: string;
+  onNote: (value: string) => void;
+  sending: boolean;
+  sent?: 'approve' | 'decline';
+  onDecide: (outcome: 'approve' | 'decline') => void;
+}) {
+  const waited = escalation.startedAtMs
+    ? Math.max(0, Math.round((Date.now() - escalation.startedAtMs) / 1000))
+    : undefined;
+
+  return (
+    <div className="px-4 py-3.5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <span className="font-mono text-[13px] text-content-body">{escalation.caller}</span>
+        <span className="font-mono text-[11.5px] text-content-faint">
+          {waited !== undefined ? `parked ${waited}s` : 'parked'} · {escalation.workflowId}
+        </span>
+      </div>
+
+      <p className="mt-1.5 max-w-[80ch] text-[13px] leading-6 text-content-secondary">
+        {escalation.question}
+      </p>
+
+      {sent ? (
+        <p className="mt-2.5 font-mono text-[12px] text-success">
+          {sent === 'approve' ? 'Approved' : 'Declined'} — signalled. The caller&apos;s workflow
+          completes on its own; this row clears on the next poll.
+        </p>
+      ) : (
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <input
+            className="min-w-[240px] flex-1 rounded-md border border-line-subtle bg-surface-primary px-2.5 py-1.5 font-mono text-[12.5px] text-content-primary outline-none focus:border-brand focus:ring-2 focus:ring-brand/30"
+            value={note}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="note — lands in the caller's rationale, e.g. confirmed by phone"
+            onChange={(event) => onNote(event.target.value)}
+          />
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() => onDecide('approve')}
+            className="rounded-md border border-success/45 bg-success/10 px-3 py-1.5 font-mono text-[12.5px] font-semibold text-success transition hover:bg-success/20 disabled:opacity-40"
+          >
+            {sending ? 'signalling…' : 'Approve'}
+          </button>
+          <button
+            type="button"
+            disabled={sending}
+            onClick={() => onDecide('decline')}
+            className="rounded-md border border-danger/45 bg-danger/10 px-3 py-1.5 font-mono text-[12.5px] font-semibold text-danger transition hover:bg-danger/20 disabled:opacity-40"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+
+      <code className="mt-2 block break-all font-mono text-[11px] text-content-faint">
+        uv run --group desk lab4_review.py decide {escalation.workflowId} approve
+      </code>
+    </div>
   );
 }
 

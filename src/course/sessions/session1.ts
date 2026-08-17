@@ -11,7 +11,7 @@ export const session1: SessionDef = {
   number: 1,
   title: 'Foundations & Control Plane',
   outcome: 'Namespaces provisioned via IaC.',
-  exitCheck: 'Namespaces exist in IaC; region set to Azure Australia East.',
+  exitCheck: 'Namespaces exist in IaC; region set to AWS ap-southeast-2.',
   labTitle: 'Provision a namespace with Terraform',
   labMinutes: 15,
 
@@ -250,9 +250,9 @@ output "namespace_endpoint" {
         '"provisioned" and "working". Note the worker must be running before you start the ' +
         'workflow; with no worker polling, the workflow sits in schedule-to-start and goes ' +
         'nowhere, which is itself worth seeing once. Every mode also runs against a local dev ' +
-        'server (`dev-server-up`, then `uv run main.py worker --local`), which needs no Cloud ' +
+        'server (`dev-server-up`, then `uv run lab1_hello.py worker --local`), which needs no Cloud ' +
         'credentials at all — `dev-server-down` stops it.',
-      command: `cd labs/worker\n\nuv run main.py worker      # terminal 1\nuv run main.py start       # terminal 2`,
+      command: `cd labs/worker\n\nuv run lab1_hello.py worker      # terminal 1\nuv run lab1_hello.py start       # terminal 2`,
       link: {
         label: `Watch it land in the Cloud UI — Workflows in ${namespaceId}`,
         url: `https://cloud.temporal.io/namespaces/${namespaceId}/workflows`,
@@ -268,7 +268,7 @@ output "namespace_endpoint" {
     },
     {
       id: 'region-correct',
-      title: 'Region is Azure Australia East',
+      title: 'Region is AWS ap-southeast-2',
       detail: 'The namespace is hosted in the region the exit check requires.',
     },
     {
@@ -283,7 +283,7 @@ output "namespace_endpoint" {
         'The namespace carries a `provisioner` tag set to `terraform`. Note what this does and does ' +
         'not say: the Cloud Ops API records no provenance, so nothing can prove Terraform created ' +
         'the namespace. The tag is a label you apply and the grader verifies the label — which is ' +
-        'exactly how the tag-based attestations in Sessions 3, 5 and 6 work.',
+        'exactly how the tag-based attestations in Sessions 3, 4 and 5 work.',
     },
     {
       id: 'api-key-created',

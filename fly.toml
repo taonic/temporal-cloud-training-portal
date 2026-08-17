@@ -45,7 +45,7 @@ primary_region = "syd"
   PORTAL_DAILY_SEAT_CAP = "50"
   ACCESS_TTL_HOURS = "168"
 
-  TRAINING_ACCOUNT_ID = "bvmon"
+  TRAINING_ACCOUNT_ID = "foofm"
   CLOUD_OPS_ADDRESS = "saas-api.tmprl.cloud:443"
   CLOUD_OPS_API_VERSION = "v0.19.1"
 
@@ -54,9 +54,9 @@ primary_region = "syd"
   TEMPORAL_TASK_QUEUE = "training-portal"
 
   # Start at dry-run for the first deploy; flip to live once you have read a
-  # sweep report on /instructor.
+  # sweep report — /api/mirror?t=<token>, under registry.lastSweep.
   SWEEPER_MODE = "dry-run"
   SWEEPER_INTERVAL_MINUTES = "15"
 
-  LAB_NAMESPACE_PREFIX = "training-"
-  LAB_REQUIRED_REGION = "azure-australiaeast"
+  LAB_NAMESPACE_PREFIX = "heidi-"
+  LAB_REQUIRED_REGION = "aws-ap-southeast-2"

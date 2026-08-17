@@ -30,14 +30,11 @@ export function labGroupName(email: string, prefix: string): string {
 }
 
 /**
- * Task queue and deployment names are the same for everyone: each student has
- * their own namespace, so there is nothing to collide with, and identical names
- * mean the commands on the page are identical to the ones in `labs/worker`.
+ * The task queue name is the same for everyone: each student has their own
+ * namespace, so there is nothing to collide with, and an identical name means
+ * the commands on the page are identical to the ones in `labs/worker`.
  */
 export const LAB_TASK_QUEUE = 'training-starter';
-export const LAB_DEPLOYMENT_NAME = 'training-workers';
-export const LAB_BUILD_ID_V1 = '1.0';
-export const LAB_BUILD_ID_V2 = '2.0';
 
 export function labMetricsAccountName(email: string, prefix: string): string {
   return `${prefix}${studentSlug(email)}-metrics`;

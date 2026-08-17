@@ -1,4 +1,4 @@
-# Lab 5 — Prometheus and Grafana over both metric sources
+# Lab 3 — Prometheus and Grafana over both metric sources
 
 One Prometheus, one Grafana, two scrape jobs — because there are two sources and neither one can
 answer the other's questions.
@@ -83,15 +83,14 @@ In another terminal, with the environment variables from your session page expor
 
 ```bash
 cd ../worker
-uv run main.py worker --metrics-port 9464
+uv run lab3_metrics.py worker --metrics-port 9464
 ```
 
 You should see `SDK metrics on http://localhost:9464/metrics`.
 
-No `--version` flag: this cohort is not running the Worker Versioning lab, so there is no Worker
-Deployment and no current version to match. Pass `--version` anyway and the worker registers a
-version nothing routes to and is handed no tasks at all — pollers present, no error, nothing
-running.
+The workers in this course are unversioned: no Build ID, no Worker Deployment, nothing to match
+against. Worth knowing before you adopt Worker Versioning — a versioned worker whose version nothing
+routes to is handed no tasks at all, with pollers present and no error anywhere.
 
 ## 3. Confirm Prometheus found it
 
@@ -104,7 +103,7 @@ Two targets are **DOWN** at this point and both are deliberate.
 doing if you want to see per-worker metrics side by side:
 
 ```bash
-uv run main.py worker --metrics-port 9465
+uv run lab3_metrics.py worker --metrics-port 9465
 ```
 
 `metrics.temporal.io` shows `server returned HTTP status 401 Unauthorized` — or is still blank, if
@@ -119,12 +118,12 @@ endpoint, the network, or the account.
 One workflow gives you a single point. A dashboard you can read needs load:
 
 ```bash
-uv run main.py load --count 50
+uv run lab3_metrics.py load --count 50
 ```
 
 ## 5. Wire up Temporal Cloud metrics
 
-Your `lab5.tf` created a service account with the **Metrics Read-Only** account role and an API key
+Your `lab3.tf` created a service account with the **Metrics Read-Only** account role and an API key
 owned by it. That key is the whole credential story for `metrics.temporal.io` — no CA to upload, no
 client certificates to distribute, and nothing account-global to set. It is worth noticing what the
 old mTLS metrics endpoint required by comparison, and that `temporalcloud_metrics_endpoint` is a

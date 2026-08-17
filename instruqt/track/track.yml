@@ -1,36 +1,35 @@
 slug: temporal-control-plane-workshop
 id: eyldxvngveqp
 title: Temporal Control Plane Workshop
-teaser: Provision Temporal Cloud from Terraform, encrypt every payload, roll out a
-  worker
+teaser: Provision Temporal Cloud from Terraform, instrument it, call an agent across
+  a namespace boundary, then break it
 description: |-
   Most Temporal training teaches you to write a Workflow. This one teaches you to **run the
   platform underneath it**.
 
-  Over six hands-on sessions you stand up a Temporal Cloud footprint the way a platform team
-  actually would — provisioned as code, encrypted end to end, versioned on rollout, instrumented
-  for on-call — and then you deliberately break it and recover.
+  Over five hands-on sessions you stand up a Temporal Cloud footprint the way a platform team
+  actually would — provisioned as code, least-privilege by default, instrumented for on-call — then
+  call a service you do not own across a namespace boundary, and finally break the whole thing on
+  purpose and recover it.
 
   ### What you'll do
 
   1. **Foundations & control plane** — Refresh the durable execution model, tour the control plane
      (namespaces, service accounts, API keys, projects and IAM), then provision a namespace with the
      Temporal Terraform provider instead of the UI.
-  2. **Data security & encryption** — Map what Temporal Cloud sees versus what never leaves your
-     network. Wire envelope encryption backed by a cloud key vault, deploy the encryption proxy, and
-     verify ciphertext-only egress on a real Workflow.
-  3. **AuthN/Z, RBAC & deployment patterns** — Map identity-provider groups to Temporal roles,
+  2. **AuthN/Z, RBAC & deployment patterns** — Map identity-provider groups to Temporal roles,
      design least-privilege access with break-glass and audit paths, and decide whether Workflows and
      Activities belong in one application or separate worker services.
-  4. **Worker config, versioning & bug-fix rollouts** — Size and tune a worker, autoscale it on
-     task-queue backlog, then ship a bug fix through Worker Versioning: new Build ID, drain the old
-     one, roll back cleanly.
-  5. **Observability & operational readiness** — Scrape the Cloud Prometheus endpoint and SDK
+  3. **Observability & operational readiness** — Scrape the Cloud Prometheus endpoint and SDK
      metrics into Grafana, build a Workflow-health dashboard around schedule-to-start latency,
      sync-match rate and cache hit rate, then define one paging alert and one ticket alert.
-  6. **Troubleshooting chaos lab** — Four live failure drills: an unversioned non-deterministic
-     deploy, a task queue with every worker stopped, a broken encryption proxy, and a stuck Activity
-     with no heartbeat. Diagnose each from the symptoms, recover, and write the runbook.
+  4. **Nexus — calling a service you do not own** — Call a risk desk running in a namespace you have
+     no credential for. It is three AI agents and a human escalation path, and you consume it without
+     ever holding the model key, the rate limit or the token bill. Watch a call survive the desk
+     being switched off.
+  5. **Troubleshooting chaos lab** — Live failure drills: an unversioned non-deterministic deploy, a
+     task queue with every worker stopped, and a stuck Activity with no heartbeat. Diagnose each from
+     the symptoms, recover, and write the runbook.
 icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
 tags:
 - python

@@ -203,8 +203,8 @@ and the ranked list of limits — two of which have lead times you don't control
    the automatic increase only applies when existing namespaces have running workflows — yours
    won't. 20 students doing the Session 1 lab need 20.
 2. **Beforehand:** `pnpm ops:preflight`, and confirm you are Account Owner on `bvmon`.
-3. **Beforehand:** run the registry once with `SWEEPER_MODE=dry-run` and read a sweep report on
-   `/instructor` before switching to `live`.
+3. **Beforehand:** run the registry once with `SWEEPER_MODE=dry-run` and read a sweep report from
+   `/api/mirror?t=<token>` (`jq .registry.lastSweep`) before switching to `live`.
 4. **On the day:** open `/instructor?t=<token>`, copy the student link, paste it into chat.
    Project the mirror.
 5. **After:** the sweeper cleans up as each 48-hour window closes. Check `/instructor` for drift.
@@ -254,13 +254,7 @@ so its checkpoint claims only what it can see: the namespace carries the tag `pr
 which is real control-plane state and grades automatically. What it does not prove is that Terraform
 put it there.
 
-Session 4 — parked for this cohort, but the reasoning stands — is the case where a better check was available. Encryption at a proxy is invisible to the
-control plane, so the obvious design records tags and calls it attested. Instead the grader reads the
-**payload metadata off the student's own workflow history** and asserts `encoding: binary/encrypted`
-— the ciphertext is on the data plane whether or not the control plane knows about it. That took the
-session from three attestations to none. Its control-plane check is worth keeping too: **no codec
-server exists**, since the proxy decrypts at your edge and a codec server would quietly hand Temporal
-Cloud a decode path.
+
 
 Session 2 is the one that grades properly, because access control *is* control-plane state. It builds
 a **namespace-scoped service account** — `namespace_scoped_access` with `write`, and no account-wide
@@ -312,7 +306,7 @@ operation-name list; it grades the *shape* of a record instead.
 
 ### Data-plane grading
 
-Sessions 3 to 7 grade facts the Cloud Ops API cannot see — the whole API has no worker,
+Sessions 3 to 5 grade facts the Cloud Ops API cannot see — the whole API has no worker,
 deployment, Build ID, task-queue or payload surface. `src/cloud/dataplane.ts` opens a client against the
 student's own namespace to read worker deployments, task-queue pollers and workflow status.
 
@@ -322,7 +316,7 @@ terminate a student's workflow, not merely read it. The only thing preventing th
 `NamespaceReader`, which exposes reads and nothing else and is the only thing handed out. If a
 mutating call is ever needed, add it as a separately named export so it shows up in review.
 
-Session 7's checkpoints assert the **recovered** state, never the broken one: "currently stuck" is
+Session 5's checkpoints assert the **recovered** state, never the broken one: "currently stuck" is
 true for thirty seconds and racy to grade, while "reached Completed after being stuck" is stable and
 is the actual objective. The cost is that the grader cannot prove a student broke anything first —
 drill 2 passes for someone who never stopped their workers — and the UI says so rather than

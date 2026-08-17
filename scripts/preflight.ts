@@ -146,7 +146,7 @@ async function main() {
       'namespace — read and write. Only src/cloud/dataplane.ts restrains it to reads.',
   );
   warn(
-    'Worker Deployments (Session 4) are public preview. If they are unavailable on this account, ' +
+    'Worker Deployments (Session 7) are public preview. If they are unavailable on this account, ' +
       "describeWorkerDeployment returns NOT_FOUND, which is indistinguishable from a student's " +
       'worker being unversioned — check with a real namespace before the workshop.',
   );
