@@ -1,6 +1,7 @@
 import * as wf from '@temporalio/workflow';
 import type * as activities from '../activities';
 import {
+  extendWindowsUpdate,
   recaptureBaselineSignal,
   registryStateQuery,
   requestSeatUpdate,
@@ -8,6 +9,7 @@ import {
 } from '../handles';
 import type {
   AccessWindow,
+  ExtendWindowsResult,
   RegistryInput,
   RegistryState,
   SeatDecision,
@@ -142,6 +144,43 @@ export async function trainingRegistry(input: RegistryInput & { sweepIntervalMs?
         if (!req?.email || !req.workflowId) throw new Error('email and workflowId are required');
         if (req.ttlMs <= 0) throw new Error('ttlMs must be positive');
         if (req.seatCap <= 0) throw new Error('seatCap must be positive');
+      },
+    },
+  );
+
+  /**
+   * Extends access windows to an absolute instant — the sweeper-facing half of
+   * `pnpm ops:extend`. Synchronous and deliberately dumb: it only ever moves an
+   * end later, only for windows still open, and it starts no activities, so it
+   * cannot leave the ledger half-written the way `requestSeat` has to guard
+   * against.
+   */
+  wf.setHandler(
+    extendWindowsUpdate,
+    (req): ExtendWindowsResult => {
+      const now = Date.now();
+      const extended: ExtendWindowsResult['extended'] = [];
+      const unchanged: string[] = [];
+
+      windows = windows.map((w) => {
+        // A closed window is a student who has already been revoked. Reopening
+        // it would un-protect nothing and would hide their leftovers from the
+        // sweeper; they re-request the link instead.
+        if (w.endMs <= now) return w;
+        if (req.emails && !req.emails.includes(w.email)) return w;
+        if (w.endMs >= req.untilMs) {
+          unchanged.push(w.email);
+          return w;
+        }
+        extended.push({ email: w.email, fromMs: w.endMs, toMs: req.untilMs });
+        return { ...w, endMs: req.untilMs };
+      });
+
+      return { extended, unchanged };
+    },
+    {
+      validator: (req) => {
+        if (!req || req.untilMs <= 0) throw new Error('untilMs must be a positive epoch value');
       },
     },
   );

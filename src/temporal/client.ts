@@ -8,6 +8,8 @@ import {
   REGISTRY_WORKFLOW_ID,
   invitationWorkflowId,
   type CanaryState,
+  type ExtendWindowsRequest,
+  type ExtendWindowsResult,
   type InvitationState,
   type RegistryState,
   type SeatDecision,
@@ -179,6 +181,17 @@ export async function revokeAccess(email: string, reason?: string): Promise<void
 export async function extendAccess(email: string, extraMs: number): Promise<void> {
   const client = await getTemporalClient();
   await client.workflow.getHandle(workflowIdForEmail(email)).signal(NAMES.extend, extraMs);
+}
+
+/**
+ * The other half of extending a student — see ExtendWindowsRequest for why one
+ * without the other loses their work. `pnpm ops:extend` calls this first.
+ */
+export async function extendWindows(req: ExtendWindowsRequest): Promise<ExtendWindowsResult> {
+  const client = await getTemporalClient();
+  return client.workflow
+    .getHandle(REGISTRY_WORKFLOW_ID)
+    .executeUpdate<ExtendWindowsResult, [ExtendWindowsRequest]>(NAMES.extendWindows, { args: [req] });
 }
 
 export async function triggerSweep(): Promise<void> {

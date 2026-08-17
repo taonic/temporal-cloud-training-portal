@@ -21,6 +21,7 @@ export const NAMES = {
   revoke: 'revoke',
   extend: 'extendMs',
   requestSeat: 'requestSeat',
+  extendWindows: 'extendWindows',
   registryState: 'registryState',
   recaptureBaseline: 'recaptureBaseline',
   sweepNow: 'sweepNow',
@@ -74,6 +75,31 @@ export interface SeatRequest {
 export type SeatDecision =
   | { granted: true; workflowId: string; expiresAtMs: number; alreadyHadAccess: boolean }
   | { granted: false; reason: 'seat-cap-reached' | 'start-failed'; detail?: string };
+
+/**
+ * Pushes the END of open access windows out to an absolute instant.
+ *
+ * This exists because extending a student is two writes, not one. The
+ * `extendMs` signal moves the invitation workflow's revoke timer; it does
+ * nothing to the window the SWEEPER reads. Move only the timer and the window
+ * still closes on the original schedule, at which point every namespace the
+ * student built dates inside a closed window — which is precisely the condition
+ * `sweepOnce` deletes on. They would keep Global Admin and lose their work.
+ *
+ * So the window moves first and the timer second. See scripts/extend-access.ts.
+ */
+export interface ExtendWindowsRequest {
+  /** Absolute instant the windows should now end at. Never shortens a window. */
+  untilMs: number;
+  /** Restrict to these addresses. Omitted means every open window. */
+  emails?: string[];
+}
+
+export interface ExtendWindowsResult {
+  extended: { email: string; fromMs: number; toMs: number }[];
+  /** Open windows that already ran to `untilMs` or beyond, so were left alone. */
+  unchanged: string[];
+}
 
 export type SweepDisposition =
   | 'deleted'

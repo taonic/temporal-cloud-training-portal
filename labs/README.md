@@ -50,7 +50,7 @@ and nothing reads it if your sandbox still exports it.)
 | `lab2.tf` | Namespace-scoped Worker service account, its API key, operators group and access |
 | `lab3.tf` | Nothing — the rollout runs from `labs/worker` and the CLI |
 | `lab4.tf` | Nothing — the work is in `labs/proxy/`, and the check reads payload metadata |
-| `lab5.tf` | Dashboard and alert catalogue tag |
+| `lab5.tf` | Metrics Read-Only service account, its API key, and the dashboard/alert catalogue tag |
 | `lab6.tf` | Runbook and escalation tag |
 
 Each file opens with what to build and what the grader checks. The full,
@@ -91,13 +91,20 @@ identity; `temporalcloud_group_access` is a separate resource keyed by the
 group's `id`, and it is the one that carries `namespace_accesses`. Create only
 the first and you have entitled nobody.
 
-## Getting the Worker's service account key out (Lab 2)
+## Getting a service account key out (Labs 2 and 5)
 
 Terraform will not print a sensitive value unless you name it:
 
 ```bash
-terraform output -raw worker_api_key
+terraform output -raw worker_api_key     # Lab 2 — the Worker's identity
+terraform output -raw metrics_api_key    # Lab 5 — the metrics scraper's identity
 ```
+
+Two service accounts, two keys, two entirely different shapes — and holding them next to each other
+is worth a minute. The Worker's is namespace-scoped with `write` on one namespace and no
+account-wide access at all. The scraper's is the reverse: an account-level `metricsread` role with
+no namespace scoping available to it. Neither can do the other's job, and neither could have been
+built in the other's shape.
 
 ## Cleaning up
 

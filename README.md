@@ -230,7 +230,7 @@ the hands-on half and the exit check.
 | 2. AuthN/Z, RBAC & Deployment | The identity a Worker runs as: namespace-scoped service account, its key, operators group | 5 | 0 | Control plane + Audit Log |
 | 3. Worker Config & Versioning | Roll out v2, drain v1 | 3 | 0 | **Data plane** |
 | 4. Data Security & Encryption | temporal-proxy in front of Cloud, payloads sealed | 1 | 0 | **Data plane** |
-| 5. Observability & Ops | SDK metrics into local Prometheus + Grafana | 2 | 1 | **Data plane** |
+| 5. Observability & Ops | SDK metrics *and* Temporal Cloud OpenMetrics into one Prometheus + Grafana | 4 | 1 | Control plane + **data plane** |
 | 6. Chaos Lab | Three student drills + one demo, graded on recovery | 3 | 1 | **Data plane** |
 
 Each session also has an ungraded **"Use what you built"** section: CLI commands, personalised with

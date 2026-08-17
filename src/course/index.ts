@@ -28,6 +28,7 @@ for (const session of SESSIONS) {
     namespaceId: 'probe.account',
     accountId: 'account',
     serviceAccountName: 'probe',
+    metricsAccountName: 'probe',
     groupName: 'probe',
     customRoleName: 'probe',
     region: 'probe',

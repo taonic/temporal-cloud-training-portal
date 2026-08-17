@@ -1,9 +1,18 @@
 global:
-  # Short interval so a 15-minute lab actually shows a curve.
+  # Short interval so a 15-minute lab actually shows a curve. It applies to the
+  # SDK job below; the Temporal Cloud job overrides it, and has to — see the
+  # rate-limit arithmetic there before you copy this file anywhere real.
   scrape_interval: 5s
   evaluation_interval: 5s
 
 scrape_configs:
+  # --------------------------------------------------------------------------
+  # Signal 1 — SDK metrics, from your own worker process.
+  #
+  # Free, unlimited, and yours: this endpoint is a socket on your laptop and
+  # nobody rate-limits it. Everything about worker health — pollers, slots,
+  # sticky cache, schedule-to-start — lives here and nowhere else.
+  # --------------------------------------------------------------------------
   - job_name: 'temporal-sdk'
     metrics_path: /metrics
     scheme: http
@@ -19,3 +28,75 @@ scrape_configs:
       - targets: ['host.docker.internal:9465']
         labels:
           group: 'sdk-metrics'
+
+  # --------------------------------------------------------------------------
+  # Signal 2 — Temporal Cloud metrics, from the service itself.
+  #
+  # The other half of the picture: backlog, sync match rate, service latency and
+  # Actions consumed. Your worker cannot report any of it, because these are
+  # facts about the server side of the connection.
+  #
+  # THREE THINGS ARE DIFFERENT ABOUT THIS JOB, and each one is a lesson.
+  #
+  # 1. It needs a credential. `credentials_file` points at ./cloud-api-key,
+  #    which ships holding a placeholder — so the target comes up DOWN with
+  #    `Jwt is missing` until you write a real key into it. Look at that failure
+  #    once before you fix it; it is what a wrong key looks like at 3am.
+  #
+  # 2. It is filtered to YOUR namespace. Without `params.namespaces` you scrape
+  #    every namespace in the account — every other student's included. Query
+  #    parameters are the only place this endpoint lets you control volume.
+  #
+  # 3. It scrapes every 180 SECONDS, not every 5. The endpoint allows
+  #    **180 requests per hour per ACCOUNT** — not per key, not per service
+  #    account, not per namespace. The whole room shares one budget:
+  #
+  #        interval    req/hr each    students that fit in 180/hr
+  #          30s          120                    1
+  #          60s           60                    3
+  #         180s           20                    9      <-- shipped default
+  #         300s           12                   15
+  #
+  #    Do not go past 300s: metrics are aggregated into one-minute windows and
+  #    each scrape returns only the most recently completed one, so a longer
+  #    interval drops windows on the floor — and past 5 minutes Prometheus marks
+  #    the series stale and your graphs break into disconnected islands.
+  #
+  #    In production you would scrape at 30s from one collector and fan out
+  #    internally. One scraper per engineer does not survive contact with the
+  #    account limit, which is the honest reason this lab looks the way it does.
+  # --------------------------------------------------------------------------
+  - job_name: 'temporal-cloud'
+    scheme: https
+    metrics_path: /v1/metrics
+    static_configs:
+      - targets: ['metrics.temporal.io']
+        labels:
+          group: 'cloud-metrics'
+
+    scrape_interval: 180s
+    scrape_timeout: 10s
+
+    # Samples arrive stamped ~3 minutes in the past — the endpoint serves the
+    # last COMPLETED aggregation window, not the current one. Honour those
+    # timestamps or Prometheus files every sample under the wrong minute and
+    # your Cloud series stops lining up with your SDK series.
+    honor_timestamps: true
+
+    params:
+      # REPLACE THIS with your own namespace — your session page has the exact
+      # line. The trailing * matches whether the label carries the bare name or
+      # the fully-qualified `<namespace>.<account>` form.
+      namespaces: ['training-REPLACE-ME*']
+
+      # Opt-in labels, off by default because they are high-cardinality. These
+      # two put a Build ID on the backlog metric, which is how you answer "is
+      # the version I just made current actually draining the queue?" — the
+      # Session 3 question the SDK metrics could not answer.
+      labels: ['temporal_worker_deployment_name', 'temporal_worker_build_id']
+
+    authorization:
+      type: Bearer
+      # A file rather than an inline `credentials:` value, so the key never
+      # lands in a config file that git is tracking.
+      credentials_file: /etc/prometheus/cloud-api-key

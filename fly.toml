@@ -43,7 +43,7 @@ primary_region = "syd"
   # without enumerating every attendee's employer.
   PORTAL_BLOCKED_EMAIL_DOMAINS = ""
   PORTAL_DAILY_SEAT_CAP = "50"
-  ACCESS_TTL_HOURS = "48"
+  ACCESS_TTL_HOURS = "168"
 
   TRAINING_ACCOUNT_ID = "bvmon"
   CLOUD_OPS_ADDRESS = "saas-api.tmprl.cloud:443"

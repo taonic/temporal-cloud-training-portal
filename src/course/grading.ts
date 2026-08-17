@@ -24,6 +24,7 @@ import { getSession } from './index';
 import {
   labCustomRoleName,
   labGroupName,
+  labMetricsAccountName,
   labNamespaceName,
   labServiceAccountName,
 } from './naming';
@@ -95,6 +96,7 @@ function buildContext(session: SessionDef, email: string): GradeContext {
     email,
     namespaceName,
     serviceAccountName: labServiceAccountName(email, cfg.LAB_NAMESPACE_PREFIX),
+    metricsAccountName: labMetricsAccountName(email, cfg.LAB_NAMESPACE_PREFIX),
     groupName: labGroupName(email, cfg.LAB_NAMESPACE_PREFIX),
     customRoleName: labCustomRoleName(email, cfg.LAB_NAMESPACE_PREFIX),
     requiredRegion: cfg.LAB_REQUIRED_REGION,

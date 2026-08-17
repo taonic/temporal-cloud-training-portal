@@ -12,8 +12,11 @@
 # or put GRAFANA_PORT=3031 in a .env file next to this one — compose reads it
 # automatically. See README.md.
 #
-# Everything is local. Your worker exposes SDK metrics on host port 9464 and
-# Prometheus scrapes them from inside the container via host.docker.internal.
+# Prometheus scrapes two things. Your worker exposes SDK metrics on host port
+# 9464, reached from inside the container via host.docker.internal. Temporal
+# Cloud exposes its own metrics at metrics.temporal.io — the one outbound
+# dependency in this stack, and the one thing here that needs a credential and
+# egress on 443.
 
 services:
   prometheus:
@@ -22,6 +25,12 @@ services:
       - '${PROMETHEUS_PORT:-9090}:9090'
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # The Temporal Cloud metrics key. Mounted read-only and always present:
+      # `credentials_file` is resolved when Prometheus loads its config, so a
+      # missing file takes the whole stack down rather than one target — which
+      # would cost you the SDK half of the lab too. It ships holding a
+      # placeholder for exactly that reason.
+      - ./cloud-api-key:/etc/prometheus/cloud-api-key:ro
     # host.docker.internal exists on Docker Desktop; this line makes it work on
     # Linux too, where it otherwise silently resolves to nothing.
     extra_hosts:

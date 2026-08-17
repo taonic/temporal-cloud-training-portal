@@ -56,11 +56,18 @@ and no longer does — it is kept so you know not to go looking for it.
       Admin can delete a Global Admin. Preflight reports which you are.
 - [ ] **Check API key expiry.** Preflight warns below 7 days. The Cloud Ops key is a personal key —
       it dies with your account and expires on its own schedule.
-- [ ] **Session 5 needs Docker only.** It uses SDK metrics into a Prometheus + Grafana pair
-      (`labs/observability`), so there is no account-global metrics CA to set and no client
-      certificates to distribute. Both run as containers in the sandbox — `obs-up` starts them and
-      the images are pre-pulled at preset build time, so a locked-down attendee network is no
-      longer the thing that breaks it.
+- [ ] **Session 5 needs Docker and outbound 443 to `metrics.temporal.io`.** It scrapes two sources
+      into one Prometheus + Grafana pair (`labs/observability`): SDK metrics from the worker, and
+      Temporal Cloud metrics over the OpenMetrics endpoint. The Cloud half authenticates with an
+      ordinary API key owned by a `metricsread` service account each student creates — so there is
+      still no account-global metrics CA to set and no client certificates to distribute, which is
+      the whole reason this half of the session became teachable. Both containers run in the sandbox,
+      `obs-up` starts them, and the images are pre-pulled at preset build time.
+- [ ] **Size the Cloud scrape interval to your cohort.** The endpoint's 180 requests/hour is an
+      **account** limit shared by the whole room, and the shipped 180s interval fits nine students.
+      This is a one-line edit to `labs/observability/prometheus.yml` in the preset and it is the one
+      Session 5 failure that hits everyone simultaneously. See
+      [Session 5](#session-by-session-notes) for the table.
 - [ ] **Attendees install nothing.** The workshop runs in the Instruqt track
       `temporal-control-plane-workshop`, on the `temporal-cloud-platform-workshop` sandbox preset.
       The Temporal CLI and its `cloud` extension, Terraform, .NET 8, Docker and Compose are all
@@ -141,7 +148,8 @@ Ordered by how likely they are to bite you.
 | 4 | **`PORTAL_ALLOWED_EMAIL_DOMAINS=*`** as shipped | Anyone with the link can grant themselves Global Admin | Narrow it before the workshop; failing that, set `PORTAL_BLOCKED_EMAIL_DOMAINS` to the consumer mail providers |
 | 5 | **6-character link**, ~2.2×10⁹ keyspace | Brute-forceable at ~12,000 req/s; a small machine falls over first | Fine in practice; don't pair it with `*` above |
 | 6 | **The grader holds Account Owner** | It has Namespace *Admin* on every student namespace — read *and* write. Only the code restrains it | Deliberate choice. Grading paths use a read-only wrapper |
-| 7 | **Session 5 is nearly unverifiable** | SDK metrics and Grafana live in the student's sandbox; the portal can only confirm a worker polled and workflows ran | Walk the room and look at screens |
+| 7 | **180 Cloud metrics requests/hour, per ACCOUNT** | Every student's Prometheus scrapes the same budget. At Temporal's documented 30s interval, ONE student consumes two-thirds of it and the rest get `429` | Set `scrape_interval` on the `temporal-cloud` job to match your headcount **before** the day — see [Session 5](#session-by-session-notes). Shipped default 180s fits nine |
+| 7a | **Session 5's dashboard is unverifiable** | Grafana lives in the student's sandbox. The portal now verifies the scraper's identity and that a worker ran, but not what is on a panel | Walk the room and look at screens |
 | 8 | **temporal-proxy is Pre-release** | "Not ready for production use" per its own front page — fine for teaching, not a shipping recommendation | Say so; the session page does |
 | 9 | **No provenance in the API** | "Created via Terraform" is unverifiable, ever | Session 1 grades the **tag** `provisioner=terraform`, and the checkpoint is named for that rather than for provenance |
 | 10 | **One machine, must stay up** | Stopping it stops every pending 48h revocation and the sweeper | `auto_stop_machines = false`. Don't "optimise" it |
@@ -183,7 +191,7 @@ their own schedule. Access already granted is unaffected — the running
 | 2. AuthN/Z, RBAC & Deployment | 5 / 0 | Nothing — every resource runs as the student |
 | 3. Worker Config & Versioning | 3 / 0 | Worker Deployments available (public preview) |
 | 4. Data Security & Encryption | 4 / 0 | Nothing — sandbox-scale, one Go binary via `proxy-up` |
-| 5. Observability & Ops | 2 / 1 | Nothing — images pre-pulled in the sandbox, started with `obs-up` |
+| 5. Observability & Ops | 4 / 1 | Size the Cloud scrape interval to your cohort — the 180/hr limit is account-wide |
 | 6. Chaos Lab | 3 / 1 | You run drill 3 as a demo |
 
 **Session 1** — the lab is ~5 minutes of Terraform and the rest is the "Use what you built" section.
@@ -283,14 +291,51 @@ eth0, nothing listens there, and the worker dies with `get_system_info call erro
 that file from the workshop repo, so a preset rebuild picks it up with no change to `proxy-up`.
 Consider narrowing the publish to `-p 127.0.0.1:7233:7233` there while you are in it.
 
-**Session 5** — SDK metrics into a local Prometheus and Grafana, all in the sandbox. The dashboard is
-provisioned already, so the lab is about reading it rather than building panels.
+**Session 5** — two metric sources into one local Prometheus and Grafana. SDK metrics from the
+worker process, and Temporal Cloud metrics from `metrics.temporal.io` via a `metricsread` service
+account each student creates in `lab5.tf`. Both dashboards are provisioned already — one written for
+this workshop, one vendored from Grafana's `temporal-mixin` — so the lab is about reading them and
+noticing what each source cannot see, rather than building panels.
 
-The trap to pre-empt: .NET's Prometheus exporter defaults produce metric names that match nothing in
-the docs — counters without `_total`, durations in milliseconds without `_seconds`. `labs/worker`
-sets the three flags that fix it, and the first "use" step has students `curl` the raw endpoint
-before writing any query. If someone's graph is empty, that is why. Gauges never take `_total`
-regardless — `temporal_num_pollers_total` returns nothing, silently.
+**Set the Cloud scrape interval before the room starts. This is the one thing here that fails for
+everyone at once.** `metrics.temporal.io` allows **180 requests per hour per ACCOUNT** — not per
+key, not per service account, not per namespace. Every student scrapes `bvmon`. The shipped
+`scrape_interval` on the `temporal-cloud` job is **180s**, which is 20 requests/hour each and fits
+nine students. Do the arithmetic against your actual headcount and edit
+`labs/observability/prometheus.yml` in the preset before the day:
+
+| Scrape interval | Requests/hour each | Students that fit in 180/hr |
+|---|---|---|
+| 30s (Temporal's documented default) | 120 | 1 |
+| 60s | 60 | 3 |
+| **180s (shipped)** | **20** | **9** |
+| 300s (the practical ceiling) | 12 | 15 |
+
+Past 300s the graphs break rather than thin out: Prometheus marks a series stale after five minutes,
+so the panels come apart into disconnected islands. If your cohort is bigger than fifteen you have
+run out of interval, and the answer is one scraper for the room — you run Prometheus at 30s and
+students add it to Grafana as a second datasource, filtering with `$temporal_namespace`. That is not
+wired up in the repo today; it is a morning-of decision that costs you a machine and some egress.
+Students still build the service account and key either way, which is what the checkpoints grade.
+
+Three smaller traps, in the order they bite:
+
+- **`.NET` exporter names.** Counters without `_total`, durations in milliseconds without `_seconds`.
+  `labs/worker` sets the flags that fix it, and the first "use" step has students `curl` the raw
+  endpoint before writing any query. If someone's SDK graph is empty, that is why. Gauges never take
+  `_total` regardless — `temporal_num_pollers_total` returns nothing, silently.
+- **`rate()` on a Cloud metric.** Every `temporal_cloud_v1_*` metric is a *gauge* already holding a
+  per-second rate, including the ones named `_count`. `rate()` over one returns near-zero. This is
+  the opposite of the SDK-side rule they just learned, half an hour earlier, on the same screen.
+- **`401` on the Cloud target for the first ten minutes.** Intended: `labs/observability/cloud-api-key`
+  ships holding a placeholder, because `credentials_file` is resolved when Prometheus loads its
+  config and a missing file would take the SDK half of the lab down too. The lab has them read that
+  error before fixing it. Remind them to `git checkout labs/observability/cloud-api-key` at the end —
+  that file is tracked and will be holding a real credential.
+
+The session's grading got substantially better with this change. Two of the five checkpoints are now
+control-plane facts (the scraper's service account carries `ROLE_METRICS_READ`; an API key is owned
+by it) rather than "walk the room and look at screens". The dashboard itself is still attested.
 
 **Session 6** — drills 1, 2 and 4 are student-run in the sandbox; drill 3 (break the encryption proxy
 from Session 4) is your demo, and it is the only one producing the "UI cannot decode payload"

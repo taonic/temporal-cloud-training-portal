@@ -7,6 +7,7 @@ import {
   getSession,
   labCustomRoleName,
   labGroupName,
+  labMetricsAccountName,
   labNamespaceName,
   labServiceAccountName,
 } from '@/course';
@@ -118,6 +119,7 @@ export default async function SessionPage({
         namespaceId: `${namespaceName}.${cfg.TRAINING_ACCOUNT_ID}`,
         accountId: cfg.TRAINING_ACCOUNT_ID,
         serviceAccountName: labServiceAccountName(email, cfg.LAB_NAMESPACE_PREFIX),
+        metricsAccountName: labMetricsAccountName(email, cfg.LAB_NAMESPACE_PREFIX),
         groupName: labGroupName(email, cfg.LAB_NAMESPACE_PREFIX),
         customRoleName: labCustomRoleName(email, cfg.LAB_NAMESPACE_PREFIX),
         region: cfg.LAB_REQUIRED_REGION,
@@ -147,6 +149,7 @@ export default async function SessionPage({
             namespaceId: `<your-namespace>.${cfg.TRAINING_ACCOUNT_ID}`,
             accountId: cfg.TRAINING_ACCOUNT_ID,
             serviceAccountName: '<your-namespace>-worker',
+            metricsAccountName: '<your-namespace>-metrics',
             groupName: '<your-namespace>-operators',
             customRoleName: '<your-namespace>-worker-role',
             region: cfg.LAB_REQUIRED_REGION,

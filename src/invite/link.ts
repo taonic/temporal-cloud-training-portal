@@ -94,6 +94,38 @@ export function nextSeatResetAt(at: Date = new Date(), timeZone = config().PORTA
   return new Date(hi);
 }
 
+/** Year and month in PORTAL_LINK_TIMEZONE, e.g. "2026-08". */
+function monthOf(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat(DAY_FORMAT_LOCALE, {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+  }).format(at);
+}
+
+/**
+ * First instant of the NEXT month in PORTAL_LINK_TIMEZONE — i.e. the moment
+ * "until the end of the month" runs out. Used by `pnpm ops:extend`, not by the
+ * invite path: a normal grant is still ACCESS_TTL_HOURS from when it was made.
+ *
+ * Same bisection as `nextSeatResetAt`, and for the same reason — a month
+ * boundary that straddles a DST transition is Intl's problem, not ours. The
+ * 32-day upper bound is always in a later month, since no month is longer
+ * than 31 days.
+ */
+export function endOfMonthAt(at: Date = new Date(), timeZone = config().PORTAL_LINK_TIMEZONE): Date {
+  const thisMonth = monthOf(at, timeZone);
+  let lo = at.getTime();
+  let hi = lo + 32 * 24 * 60 * 60 * 1000;
+
+  while (hi - lo > 1000) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (monthOf(new Date(mid), timeZone) === thisMonth) lo = mid;
+    else hi = mid;
+  }
+  return new Date(hi);
+}
+
 /* -------------------------------------------------------------------------- */
 /* Email gating                                                                */
 /* -------------------------------------------------------------------------- */

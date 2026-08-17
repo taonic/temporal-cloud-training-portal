@@ -48,6 +48,8 @@ export interface GradeContext {
   /** Per-student resource names, derived from the email. */
   namespaceName: string;
   serviceAccountName: string;
+  /** Session 5's metrics scraper — a second service account, in the opposite shape. */
+  metricsAccountName: string;
   groupName: string;
   customRoleName: string;
   requiredRegion: string;
@@ -88,6 +90,8 @@ export interface SnippetContext {
   namespaceId: string;
   accountId: string;
   serviceAccountName: string;
+  /** Session 5's metrics scraper — a second service account, in the opposite shape. */
+  metricsAccountName: string;
   groupName: string;
   customRoleName: string;
   region: string;

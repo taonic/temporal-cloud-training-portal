@@ -3,6 +3,11 @@ apiVersion: 1
 datasources:
   - name: Prometheus
     type: prometheus
+    # Pinned, not generated. The vendored Temporal Cloud overview dashboard
+    # selects its datasource by uid through a `${datasource}` variable, and a
+    # random uid on every `obs-up` would leave every panel reading "Datasource
+    # not found" until someone picked it from the dropdown by hand.
+    uid: prometheus
     access: proxy
     # Container-to-container, so the service name rather than localhost.
     url: http://prometheus:9090
