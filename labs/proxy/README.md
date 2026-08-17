@@ -1,4 +1,7 @@
-# Lab 4 — Temporal Proxy
+# Temporal Proxy — parked with Lab 4
+
+> Not running in this cohort. Kept because it works: restore Session 4 in
+> `src/course/index.ts` to put it back.
 
 [`temporalio/temporal-proxy`](https://github.com/temporalio/temporal-proxy) is a gRPC proxy that
 sits between your Workers and Temporal Cloud. It terminates TLS, attaches the API key, rewrites the
@@ -59,8 +62,8 @@ alias, and `PROXY_CONFIG` an accepted environment variable, but both still need 
 
 ```bash
 cd labs/worker
-dotnet run -- worker --version 2.0 --proxy   # terminal 2
-dotnet run -- start  --proxy                 # terminal 3
+uv run main.py worker --version 2.0 --proxy   # terminal 2
+uv run main.py start  --proxy                 # terminal 3
 ```
 
 `--proxy` connects in plaintext to `127.0.0.1:7233` with the short namespace and **no credentials at
@@ -76,9 +79,9 @@ worker polls and is handed nothing, and the workflow sits in the UI having never
 enabled, so every payload the proxy forwards is sealed from the first workflow onward. You do not
 switch it on; you find out what it did.
 
-1. Start a workflow **through the proxy**: `dotnet run -- start --proxy`. Open it in the Cloud UI —
+1. Start a workflow **through the proxy**: `uv run main.py start --proxy`. Open it in the Cloud UI —
    the input is opaque bytes.
-2. Start one **without** the proxy: `dotnet run -- start`, which connects straight to Cloud carrying
+2. Start one **without** the proxy: `uv run main.py start`, which connects straight to Cloud carrying
    the endpoint, namespace and your API key. Open that one — the input is readable JSON.
 3. Compare them. Same worker, same workflow code, same namespace; the only difference is which side
    of the proxy the client sat on.

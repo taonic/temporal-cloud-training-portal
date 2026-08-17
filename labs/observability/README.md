@@ -83,15 +83,15 @@ In another terminal, with the environment variables from your session page expor
 
 ```bash
 cd ../worker
-dotnet run -- worker --version 2.0 --metrics-port 9464
+uv run main.py worker --metrics-port 9464
 ```
 
 You should see `SDK metrics on http://localhost:9464/metrics`.
 
-`--version 2.0` matches the current version Lab 3 left on the `training-workers` Worker Deployment.
-A versioned task queue routes new executions only to its current version, so an unversioned worker
-is handed no tasks at all — the load you generate below would appear in the Cloud UI and never run.
-The worker prints a warning if you forget.
+No `--version` flag: this cohort is not running the Worker Versioning lab, so there is no Worker
+Deployment and no current version to match. Pass `--version` anyway and the worker registers a
+version nothing routes to and is handed no tasks at all — pollers present, no error, nothing
+running.
 
 ## 3. Confirm Prometheus found it
 
@@ -104,7 +104,7 @@ Two targets are **DOWN** at this point and both are deliberate.
 doing if you want to see per-worker metrics side by side:
 
 ```bash
-dotnet run -- worker --version 2.0 --metrics-port 9465
+uv run main.py worker --metrics-port 9465
 ```
 
 `metrics.temporal.io` shows `server returned HTTP status 401 Unauthorized` — or is still blank, if
@@ -119,7 +119,7 @@ endpoint, the network, or the account.
 One workflow gives you a single point. A dashboard you can read needs load:
 
 ```bash
-dotnet run -- load --count 50
+uv run main.py load --count 50
 ```
 
 ## 5. Wire up Temporal Cloud metrics
@@ -205,8 +205,10 @@ student's included — against a 50k-datapoint response cap, and `X-Completeness
 response header is the only warning you get that data was silently truncated.
 
 `labels` opts *in* to high-cardinality labels that are off by default. These two put a Build ID on
-`temporal_cloud_v1_approximate_backlog_count`, which answers a question Session 3 left open and the
-SDK metrics cannot touch: *is the version I just made current actually draining the queue?*
+`temporal_cloud_v1_approximate_backlog_count`, which answers a question the SDK metrics cannot
+touch: *is the version I just made current actually draining the queue?* With unversioned workers
+that label comes back empty — it is set here so the panel starts working the day you adopt Worker
+Versioning, rather than being something you discover you need mid-incident.
 
 ## Why your queries return nothing
 
@@ -252,21 +254,20 @@ not copied from a docs page:
 
 Two traps live here.
 
-**Durations.** The .NET exporter defaults to *integer milliseconds with no `_seconds` in the name*.
-`labs/worker` sets two options to fix that:
+**Durations.** The exporter defaults to *integer milliseconds with no `_seconds` in the name*.
+`labs/worker/training/config.py` sets two options to fix that:
 
-```csharp
-Prometheus = new($"0.0.0.0:{metricsPort}")
-{
-    HasUnitSuffix         = true,   // default: false
-    UseSecondsForDuration = true,   // default: false (milliseconds!)
-}
+```python
+PrometheusConfig(
+    bind_address=f"0.0.0.0:{metrics_port}",
+    unit_suffix=True,           # default: False
+    durations_as_seconds=True,  # default: False (milliseconds!)
+)
 ```
 
 **Counters.** Much of the internet writes `temporal_workflow_completed_total`, because that is the
-OpenMetrics convention. In Temporalio 1.17 the counters carry **no `_total` suffix at all** — and
-setting `HasCounterTotalSuffix = true` changes nothing; the emitted names were byte-identical with
-the flag on and off. So query `temporal_workflow_completed`.
+OpenMetrics convention. `counters_total_suffix` defaults to `False` and this worker leaves it there,
+so the counters carry **no `_total` suffix at all**. Query `temporal_workflow_completed`.
 
 Either mistake gives you an empty graph and no error, which is why step one of this lab is to look
 at the raw endpoint rather than trust any of the above:
@@ -278,13 +279,14 @@ curl -s localhost:9464/metrics | grep -E '^temporal_' | cut -d'{' -f1 | sort -u
 ### Porting a dashboard written for another SDK
 
 Almost every Temporal dashboard you will find online was written against the Java or TypeScript SDK,
-and **not one of its queries runs unmodified here**. The underlying metrics are the same — .NET,
-TypeScript, Python and Ruby all sit on the same Rust core — but the Prometheus exporter names them
-differently per SDK and per configuration. This table is the mapping, measured by running this
-worker and diffing the endpoint against
+and **not one of its queries runs unmodified here**. The underlying metrics are the same — Python,
+.NET, TypeScript and Ruby all sit on the same Rust core, and this worker emits byte-identical family
+names to the .NET one it replaced — but the Prometheus exporter names them differently per SDK and
+per configuration. This table is the mapping, measured by running this worker and diffing the
+endpoint against
 [a TypeScript worker-tuning dashboard](https://github.com/taonic/temporal-training-operations-typescript/blob/main/worker-tuning/dashboard/sdk_metrics.json):
 
-| In a TS/Java dashboard | Here (.NET, `labs/worker` options) |
+| In a TS/Java dashboard | Here (Python, `labs/worker` options) |
 |---|---|
 | `..._latency_bucket`, then `/ 1000` | `..._latency_seconds_bucket`, **no division** |
 | `temporal_request_total` | `temporal_request` |
@@ -303,10 +305,11 @@ reports integer milliseconds; ours reports seconds, so keeping the division rend
 thousand times too small — a plausible-looking graph that is simply wrong, which is worse than a
 blank one.
 
-**There are no host metrics.** The .NET SDK's Prometheus exporter publishes Temporal Core's metrics
-and nothing else — no CPU, no heap, no GC, no `process_*` at all. Any dashboard with a "Compute" row
-built on `process_cpu_usage` loses it here. In production you would run a separate exporter, or the
-OpenTelemetry .NET runtime instrumentation, alongside on its own port and correlate in Grafana.
+**There are no host metrics.** The SDK's Prometheus exporter publishes Temporal Core's metrics and
+nothing else — no CPU, no heap, no GC, no `process_*` at all. Any dashboard with a "Compute" row
+built on `process_cpu_usage` loses it here. In production you would run `prometheus-client`'s own
+process collector, or the OpenTelemetry Python runtime instrumentation, on its own port and
+correlate in Grafana.
 
 Three metrics worth knowing that the TS dashboard does not use, and which are on Worker health here:
 

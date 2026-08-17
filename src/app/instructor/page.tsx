@@ -4,6 +4,7 @@ import { verifyInstructorToken } from '@/lib/auth';
 import { requestBaseUrl } from '@/lib/request-url';
 import { Callout, Denied, Shell } from '@/lib/ui';
 import { Mirror } from './Mirror';
+import { Switchboard } from './Switchboard';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,12 @@ export default async function InstructorPage({
       </div>
 
       <Mirror token={token} />
+
+      {/* The Nexus segment's screen. Inert until you type a handler namespace,
+          so it costs nothing on a day you are not running that segment. */}
+      <div className="mt-10 border-t border-line-subtle/50 pt-8">
+        <Switchboard token={token} />
+      </div>
     </Shell>
   );
 }

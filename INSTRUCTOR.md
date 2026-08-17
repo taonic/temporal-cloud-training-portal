@@ -70,8 +70,8 @@ and no longer does — it is kept so you know not to go looking for it.
       [Session 5](#session-by-session-notes) for the table.
 - [ ] **Attendees install nothing.** The workshop runs in the Instruqt track
       `temporal-control-plane-workshop`, on the `temporal-cloud-platform-workshop` sandbox preset.
-      The Temporal CLI and its `cloud` extension, Terraform, .NET 8, Docker and Compose are all
-      baked into the image at pinned versions, with `terraform init` and `dotnet build` already
+      The Temporal CLI and its `cloud` extension, Terraform, Python 3.12 with `uv`, Docker and
+      Compose are all baked into the image at pinned versions, with `terraform init` and `uv sync` already
       run and the proxy, Prometheus and Grafana images pre-pulled. Attendees need a browser and
       the track link. What they still have to do themselves is `workshop-creds` and
       `workshop-check` at the top of Session 1 — see below.
@@ -79,6 +79,11 @@ and no longer does — it is kept so you know not to go looking for it.
       the Terminal tab. It probes the tools, outbound gRPC on 7233 and the Cloud Ops API. This is
       the check that used to be an email asking twenty people to run `nc -vz`; it is now one
       sandbox launch, so there is no excuse for finding out on the day.
+- [ ] **Session 6 needs a namespace of your own and ten minutes.** You host the Rate Desk: a desk
+      namespace the students cannot reach, an account-global Nexus endpoint, and their namespaces on
+      its allowlist. The allowlist cannot be built until the room has finished Session 1, so this is
+      a during-the-day step — `pnpm ops:nexus-allowlist <desk-namespace>` prints the commands. Do
+      rehearse it beforehand against a dev server; see [Session 6](#session-by-session-notes).
 - [ ] **Session 4 needs no infrastructure.** It runs `temporalio/temporal-proxy` as a container
       with a throwaway in-process key, so there is no AKS cluster, no Azure Key Vault and no
       certificates. `proxy-up` runs it, deriving the short namespace name and account that
@@ -185,14 +190,23 @@ their own schedule. Access already granted is unaffected — the running
 
 ## Session-by-session notes
 
+**This cohort runs Sessions 1, 2, 5, 6 and 7.** Worker Versioning (3) and the Encryption Proxy (4)
+are parked in `src/course/index.ts` — two commented imports and two commented array entries. Session
+numbers deliberately did not shift, so nothing students write today moves if you put them back.
+
+One thing to know before you do put them back: parking Session 3 changed the surviving sessions.
+Every later worker used to run `--version 2.0`, which works only *because* Session 3 sets that as the
+deployment's current version. Without it a versioned worker registers a version nothing routes to and
+is handed no tasks — pollers present, no error, nothing running. So Sessions 5 to 7 now run
+unversioned workers and say so on the page. Restoring Session 3 means putting `--version` back.
+
 | Session | Verified / attested | Needs from you |
 |---|---|---|
 | 1. Foundations & Control Plane | 5 / 0 | Namespace quota raised |
 | 2. AuthN/Z, RBAC & Deployment | 5 / 0 | Nothing — every resource runs as the student |
-| 3. Worker Config & Versioning | 3 / 0 | Worker Deployments available (public preview) |
-| 4. Data Security & Encryption | 4 / 0 | Nothing — sandbox-scale, one Go binary via `proxy-up` |
 | 5. Observability & Ops | 4 / 1 | Size the Cloud scrape interval to your cohort — the 180/hr limit is account-wide |
-| 6. Chaos Lab | 3 / 1 | You run drill 3 as a demo |
+| 6. Nexus | 2 / 2 | **You host the Rate Desk** — endpoint, allowlist, and a worker you kill on cue |
+| 7. Chaos Lab | 3 / 1 | You run drill 3 as a demo |
 
 **Session 1** — the lab is ~5 minutes of Terraform and the rest is the "Use what you built" section.
 Let fast finishers run `labs/worker`; tell them to try `start` *without* a worker first, so they
@@ -269,8 +283,10 @@ don't recommend shipping it. And the second real check is that **no codec server
 server would hand Temporal Cloud the decode path the whole pattern exists to withhold, so a student
 who adds one to make the UI readable fails, correctly.
 
-**Check `proxy-up` in the sandbox before the day.** The helper lives in the Instruqt preset, not in
-this repo, so nothing here can fix it. If it prints
+**Check `proxy-up` in the sandbox before the day.** The helper lives in the Instruqt preset —
+`instruqt/sandbox/scripts/setup-temporal-cloud-workshop`, in this repo since the preset and track
+moved under `instruqt/`. Fixing it needs the preset pushed and a fresh sandbox, not a portal
+deploy. If it prints
 
 ```
 Incorrect Usage: flag provided but not defined: -config
@@ -320,7 +336,7 @@ Students still build the service account and key either way, which is what the c
 
 Three smaller traps, in the order they bite:
 
-- **`.NET` exporter names.** Counters without `_total`, durations in milliseconds without `_seconds`.
+- **Prometheus exporter names.** Counters without `_total`, durations in milliseconds without `_seconds`.
   `labs/worker` sets the flags that fix it, and the first "use" step has students `curl` the raw
   endpoint before writing any query. If someone's SDK graph is empty, that is why. Gauges never take
   `_total` regardless — `temporal_num_pollers_total` returns nothing, silently.
@@ -337,9 +353,63 @@ The session's grading got substantially better with this change. Two of the five
 control-plane facts (the scraper's service account carries `ROLE_METRICS_READ`; an API key is owned
 by it) rather than "walk the room and look at screens". The dashboard itself is still attested.
 
-**Session 6** — drills 1, 2 and 4 are student-run in the sandbox; drill 3 (break the encryption proxy
-from Session 4) is your demo, and it is the only one producing the "UI cannot decode payload"
-symptom that one of the three runbooks covers. Checkpoints grade the **recovery**, so the grader
+**Session 6 — Nexus, the Rate Desk.** ~20 minutes. This is the one session where the setup is yours
+rather than the students': you host the service they call. Student-facing background is in
+`labs/worker/RATE_DESK.md`; the code is `training/rate_desk.py` (the contract both sides share),
+`training/desk.py` (your handler) and `PaymentWorkflow` in `training/workflows.py` (their caller).
+
+Three of its four checkpoints are real, which was not obvious: `NexusOperationCompleted` lands in the
+**caller's** history, so the portal proves a cross-namespace call from the student's own namespace and
+never needs a credential for yours. The outage is attested — `BackingOff` exists only while it is
+happening, and a recovered history is identical to one that never stalled.
+
+**Before the segment, after the room has finished Session 1:**
+
+1. Provision a desk namespace you own. Any namespace works; students must have no access to it.
+2. `cp labs/worker/.env.desk.example labs/worker/.env.desk` and fill in that namespace. It loads on
+   top of `.env`, so only the differing keys are needed. It is gitignored.
+3. `pnpm ops:nexus-allowlist <desk-namespace>` — reads the account, finds every `training-*`
+   namespace, and prints the `temporal cloud nexus endpoint` commands to paste: `create
+   --idempotent` with every `--allow-namespace`, an `allowed-namespace set` to reset the roster, and
+   the `remove`/`add` pair for round 2. Re-run whenever the roster changes.
+
+   Deliberately not Terraform. The endpoint is a live classroom control you change while talking, and
+   plan/apply is the wrong instrument for that. It is also account-global, so a state file that
+   thinks it owns it becomes a liability the moment anyone edits the endpoint in the UI.
+4. `uv run main.py desk` in a terminal you can kill on cue. Leave it running.
+
+**The four rounds:**
+
+| Round | You | Them | What lands |
+|---|---|---|---|
+| 1 | desk up | `uv run main.py quote` | One `quote-<their-namespace>` workflow per caller in *your* namespace. Ticket numbers in arrival order, so it is a race |
+| 2 | drop one namespace from the allowlist | that person calls again | Refused at the boundary. Healthy worker, valid key, unchanged code |
+| 3 | **Ctrl-C the desk** | everyone calls again | Nothing fails. `State: BackingOff`, `Attempt: 4`, climbing |
+| 4 | restart the desk | nothing | Every queued call completes on its own. Nothing resubmitted |
+
+Round 3 is the segment. Verified on a dev server: two caller namespaces both sat at
+`BackingOff / Attempt 4 / NextAttemptScheduleTime 3 seconds from now` with the handler dead, and
+both completed within 30 seconds of it restarting.
+
+**Three things to say out loud:**
+
+- **Nexus control-plane tooling is Pre-release** (`tcld nexus` is marked EXPERIMENTAL). Same footing
+  as `temporal-proxy` in Session 4 — fine for teaching, not a shipping recommendation yet.
+- **Allowlist changes take up to a minute** to reach the data plane. Make the round-2 revoke, then
+  keep talking for a beat before asking them to call again.
+- **The ticket counter is not durable.** It is a module global on the desk worker: restart and it
+  returns to 1, run two desk workers and both hand out ticket 4. That is deliberate and worth one
+  sentence — it is the argument for putting sequencing state in a workflow rather than beside one.
+
+**One difference between the dev server and Cloud that will catch you rehearsing.** On a dev server
+`temporal operator nexus endpoint create` has no `--allow-namespace` flag and any namespace may
+call. In Cloud, **no caller is permitted by default**. So round 2 cannot be rehearsed locally — the
+revoke has no effect on a dev server. Rehearse rounds 1, 3 and 4 locally; test round 2 against
+`bvmon` with your own second namespace before the day.
+
+**Session 7 (chaos)** — drills 1, 2 and 4 are student-run in the sandbox. Drill 3 (break the
+encryption proxy) is parked with Session 4, so this cohort drafts **two** runbooks rather than three
+and there is no instructor demo in this session. Checkpoints grade the **recovery**, so the grader
 cannot prove they broke anything first — drill 2 passes for someone who never stopped their workers.
 Say that out loud; the page says it too.
 
@@ -394,9 +464,12 @@ account-scoped block is rejected outright with
 
 ## Related docs
 
-- Instruqt track `temporal-control-plane-workshop` and sandbox preset
-  `temporal-cloud-platform-workshop` — what is installed, the `workshop-*` helper commands,
-  and the egress the sandbox needs. Replaces the old PREREQUISITES.md: attendees install nothing
+- [instruqt/sandbox/README.md](instruqt/sandbox/README.md) — the sandbox preset
+  `temporal-cloud-platform-workshop`: what is installed, the `workshop-*` helper commands, the two
+  worker stacks, recovery via `restore-labs`, and the egress the sandbox needs. Replaces the old
+  PREREQUISITES.md: attendees install nothing
+- [instruqt/track/track.yml](instruqt/track/track.yml) — the track `temporal-control-plane-workshop`
+  itself: the tabs students see, the timers, and which preset it boots
 - [README.md](README.md) — architecture, sweeper semantics, security posture
 - [DEPLOY.md](DEPLOY.md) — Fly.io deployment, secrets, environment variables
 - [quiz.md](quiz.md) — 18 AhaSlides questions, 3 per session

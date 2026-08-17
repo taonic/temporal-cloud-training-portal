@@ -5,9 +5,15 @@ Everything you touch during the workshop lives here.
 ```
 labs/
   *.tf              Terraform — plumbing done, resources yours to write
-  worker/           C# worker and workflows (Labs 1, 3, 4, 5, 6)
+  worker/           Python worker and workflows, run with uv (Labs 1, 5, 6, 7)
   observability/    Prometheus + Grafana on Docker (Lab 5)
+  proxy/            Encryption proxy — parked with Lab 4, not running this cohort
 ```
+
+This cohort runs Labs **1, 2, 5, 6 and 7**. Worker Versioning (3) and the
+Encryption Proxy (4) are parked: their session pages, lab headers and sandbox
+assets all still exist, they are simply not in the running course. Numbers are
+unchanged so nothing you write today has to move if they come back.
 
 The Terraform plumbing is already set up — provider and version pin — so
 `terraform init` works before you have written a line.
@@ -17,6 +23,12 @@ header in each.
 `worker/` and `observability/` are the opposite: working code you run rather
 than write. If you break something in there, `git checkout labs/worker` puts it
 back.
+
+The worker needs no install step and no virtualenv you manage. `uv run main.py
+<command>` creates the environment from `uv.lock` on first use — pinned versions,
+same for everyone in the room — and reuses it after that. The lockfile is
+committed on purpose; it is what makes that first run offline-safe once the
+sandbox image has warmed the cache.
 
 ## Once, at the start
 
@@ -48,10 +60,9 @@ and nothing reads it if your sandbox still exports it.)
 |---|---|
 | `lab1.tf` | Namespace, region, retention, and the one `provisioner` tag block |
 | `lab2.tf` | Namespace-scoped Worker service account, its API key, operators group and access |
-| `lab3.tf` | Nothing — the rollout runs from `labs/worker` and the CLI |
-| `lab4.tf` | Nothing — the work is in `labs/proxy/`, and the check reads payload metadata |
 | `lab5.tf` | Metrics Read-Only service account, its API key, and the dashboard/alert catalogue tag |
-| `lab6.tf` | Runbook and escalation tag |
+| `lab6.tf` | Nothing — you are a caller on your instructor's Nexus endpoint. Boundary decision tag |
+| `lab7.tf` | Runbook and escalation tag |
 
 Each file opens with what to build and what the grader checks. The full,
 personalised configuration is on the matching session page in the portal — these

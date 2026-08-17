@@ -36,24 +36,24 @@ export const session3: SessionDef = {
   // Every `temporal` command carries its own --address/--namespace/--api-key.
   // The lab runs three terminals, and exports do not cross terminals — an
   // ambient credential here would fail in exactly the terminal a student
-  // opened last. The dotnet workers need none of it: they read labs/worker/.env.
+  // opened last. The Python workers need none of it: they read labs/worker/.env.
   labCommands: ({ namespaceId }) => {
     const conn = `\\\n  --address ${namespaceId}.tmprl.cloud:7233 \\\n  --namespace ${namespaceId} \\\n  --api-key $TEMPORAL_API_KEY`;
     return [
       {
         label: `Terminal 1 — run the v${LAB_BUILD_ID_V1} worker`,
-        command: `cd labs/worker\ndotnet run -- worker --version ${LAB_BUILD_ID_V1}`,
+        command: `cd labs/worker\nuv run main.py worker --version ${LAB_BUILD_ID_V1}`,
         expect: `\`Polling '${LAB_TASK_QUEUE}'\`. Setting DeploymentOptions is what makes the server register a Worker Deployment — an unversioned worker registers nothing at all, and this checkpoint then fails in a way that looks identical to the feature being unavailable.`,
         grades: 'deployment-exists',
       },
       {
         label: 'Terminal 2 — give it some work',
-        command: 'cd labs/worker\ndotnet run -- start',
+        command: 'cd labs/worker\nuv run main.py start',
         expect: 'The workflow completes on v1. Run it a few times so there is something in flight later.',
       },
       {
         label: `Terminal 3 — run the v${LAB_BUILD_ID_V2} worker alongside it`,
-        command: `cd labs/worker\ndotnet run -- worker --version ${LAB_BUILD_ID_V2}`,
+        command: `cd labs/worker\nuv run main.py worker --version ${LAB_BUILD_ID_V2}`,
         expect: `Both versions are now polling and neither is current. Registering a version routes nothing to it — that separation is the whole lab.`,
         grades: 'two-versions',
       },
@@ -83,28 +83,36 @@ export const session3: SessionDef = {
 
   // Reference, not instructions: the part of this lab that is neither a command
   // nor Terraform. Students come back to this when the deployment does not appear.
-  snippet: () => `// What makes the deployment exist at all — labs/worker/Program.cs
+  snippet: () => `# What makes the deployment exist at all — labs/worker/main.py
 
-var options = new TemporalWorkerOptions("${LAB_TASK_QUEUE}")
-{
-    DeploymentOptions = new WorkerDeploymentOptions(
-        new WorkerDeploymentVersion("${LAB_DEPLOYMENT_NAME}", "${LAB_BUILD_ID_V1}"),
-        useWorkerVersioning: true)
-    {
-        DefaultVersioningBehavior = VersioningBehavior.Pinned,
-    },
-};
+worker = Worker(
+    client,
+    task_queue="${LAB_TASK_QUEUE}",
+    workflows=[GreetingWorkflow, StuckActivityWorkflow],
+    activities=[describe, hang_after_heartbeat],
+    deployment_config=WorkerDeploymentConfig(
+        version=WorkerDeploymentVersion(
+            deployment_name="${LAB_DEPLOYMENT_NAME}",
+            build_id="${LAB_BUILD_ID_V1}",
+        ),
+        use_worker_versioning=True,
+        default_versioning_behavior=VersioningBehavior.PINNED,
+    ),
+)
 
-// Pinned    — an execution finishes on the version it started on.
-// AutoUpgrade — it moves to the current version at its next task. Fine for
-//              short workflows, dangerous for long ones that would replay
-//              across a code change.
-//
-// The behaviour is set on the WORKER, not as [Workflow(VersioningBehavior = ...)]
-// on the class. A workflow that declares a behaviour while its worker is
-// UNVERSIONED is rejected by the server, and the workflow task then retries
-// forever — the execution hangs rather than fails. Setting it here keeps the
-// same workflow code usable by the unversioned workers in Sessions 1, 4, 5 and 6.`,
+# PINNED       — an execution finishes on the version it started on.
+# AUTO_UPGRADE — it moves to the current version at its next task. Fine for
+#                short workflows, dangerous for long ones that would replay
+#                across a code change.
+#
+# The behaviour is set on the WORKER, not as @workflow.defn(versioning_behavior=...)
+# on the class. A workflow that declares a behaviour while its worker is
+# UNVERSIONED is rejected by the server, and the workflow task then retries
+# forever — the execution hangs rather than fails. Setting it here keeps the
+# same workflow code usable by the unversioned workers in Sessions 1 and 2.
+#
+# Drop deployment_config entirely and the server registers NOTHING. That is the
+# whole difference between an unversioned worker and a versioned one.`,
 
   use: ({ namespaceId }) => ({
     intro:

@@ -16,9 +16,12 @@ next-env.d.ts
 *.key
 *.crt
 
-# .NET build output from labs/worker
-obj/
-bin/
+# uv's virtualenv for labs/worker. uv.lock IS committed — a workshop wants every
+# attendee resolving the same versions, and it is what makes `uv run` offline-safe
+# once the preset has warmed the cache.
+.venv/
+__pycache__/
+*.pyc
 
 .DS_Store
 
@@ -28,3 +31,6 @@ labs/worker/.env
 course.md
 quiz.md
 nice-to-have.md
+
+# Instructor-only Rate Desk credential (labs/worker/.env.desk.example is the template)
+labs/worker/.env.desk

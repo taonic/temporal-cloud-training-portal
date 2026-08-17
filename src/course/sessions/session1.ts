@@ -17,7 +17,8 @@ export const session1: SessionDef = {
 
   note:
     '**Everything in this workshop runs in the browser sandbox — open it now and keep it open for ' +
-    'the next two days.** Terraform, the Temporal CLI and its `cloud` extension, .NET and Docker are ' +
+    'the next two days.** Terraform, the Temporal CLI and its `cloud` extension, Python with `uv` ' +
+    'and Docker are ' +
     'all installed there at the right versions, and every command on this page and on Sessions 2 to ' +
     '6 is typed in its **Terminal** tab, with files edited in its **Editor** tab. Your laptop needs ' +
     'nothing installed on it and nothing you run locally is graded. The sandbox is also where your ' +
@@ -46,7 +47,7 @@ export const session1: SessionDef = {
         command: 'workshop-help',
         expect:
           'The list of `workshop-*` helper commands, which the sessions refer to by name. ' +
-          '`terraform init` and `dotnet build` have already run, so the toolchain is warm — ' +
+          '`terraform init` and `uv sync` have already run, so the toolchain is warm — ' +
           'nothing here is waiting on a download.',
       },
       {
@@ -77,7 +78,7 @@ export const session1: SessionDef = {
         expect:
           'Four variables written to the two places that read them: your shell ' +
           '(`TEMPORAL_API_KEY` for both CLIs, `TEMPORAL_CLOUD_API_KEY` for the Terraform ' +
-          'provider — two names, one key) and `labs/worker/.env` for the C# worker. It writes a ' +
+          'provider — two names, one key) and `labs/worker/.env` for the Python worker. It writes a ' +
           'file rather than exporting into one shell on purpose: later labs run three or four ' +
           'terminals at once, and a value set in only one of them is a confusing way to lose an ' +
           'afternoon.',
@@ -243,15 +244,15 @@ output "namespace_endpoint" {
     stretch: {
       title: 'Stretch: actually run something',
       body:
-        'The starter worker in labs/worker is a C# worker and a one-activity workflow. It reads ' +
+        'The starter worker in labs/worker is a Python worker and a one-activity workflow. It reads ' +
         '`labs/worker/.env`, which `workshop-creds` already wrote in the lab, so there is nothing ' +
         'to configure — run it and it is pointed at your namespace. That is the difference between ' +
         '"provisioned" and "working". Note the worker must be running before you start the ' +
         'workflow; with no worker polling, the workflow sits in schedule-to-start and goes ' +
         'nowhere, which is itself worth seeing once. Every mode also runs against a local dev ' +
-        'server (`dev-server-up`, then `dotnet run -- worker --local`) — but stop it with ' +
-        '`dev-server-down` before Session 4, which wants port 7233 for the proxy.',
-      command: `cd labs/worker\n\ndotnet run -- worker      # terminal 1\ndotnet run -- start       # terminal 2`,
+        'server (`dev-server-up`, then `uv run main.py worker --local`), which needs no Cloud ' +
+        'credentials at all — `dev-server-down` stops it.',
+      command: `cd labs/worker\n\nuv run main.py worker      # terminal 1\nuv run main.py start       # terminal 2`,
       link: {
         label: `Watch it land in the Cloud UI — Workflows in ${namespaceId}`,
         url: `https://cloud.temporal.io/namespaces/${namespaceId}/workflows`,

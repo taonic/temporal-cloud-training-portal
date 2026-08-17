@@ -1,0 +1,90 @@
+name: Temporal Cloud Platform Workshop
+slug: temporal-cloud-platform-workshop
+description: Six-session platform workshop sandbox — Temporal CLI + cloud extension,
+  Terraform, both worker toolchains (Python 3.12 + uv, .NET SDK 8), Docker Compose,
+  pre-pulled proxy/Prometheus/Grafana images, code-server, and the lab repo cloned,
+  restored and built
+virtualmachines:
+- name: temporal-cloud-workshop
+  image: instruqt/docker-28-3
+  shell: /bin/bash
+  # The worker build (uv sync or dotnet restore + build), a Docker daemon,
+  # code-server and (in Session 5) a Prometheus + Grafana pair all run at once.
+  # n1-standard-1 does not carry it.
+  machine_type: n1-standard-4
+  memory: 16384
+  cpus: 4
+  # Every learner-facing service is on a high port — code-server 8443, Grafana
+  # 3030, Prometheus 9090, SDK metrics 9464, dev-server UI 8233 — and service
+  # tabs need the firewall opened for them.
+  allow_external_ingress:
+  - http
+  - https
+  - high-ports
+  # Sessions 4 and 5 run temporal-proxy, Prometheus and Grafana as containers.
+  nested_virtualization: true
+  # code-server serves HTTPS; service tabs want a real certificate.
+  provision_ssl_certificate: true
+  environment:
+    LAB_REPO_URL: https://github.com/taonic/temporal-cloud-training-portal.git
+    LAB_REPO_REF: main
+    WORKSHOP_DIR: /workspace/workshop
+    TEMPORAL_ACCOUNT: bvmon
+
+    # Which worker stack `worker-run` (and rw / rs / rm5) uses. Both toolchains
+    # are installed either way — Python 3.12 with uv, and .NET SDK 8 — because
+    # labs/worker is mid-migration from C# to Python and a preset that knows only
+    # one of them breaks on the commit that switches it.
+    #
+    # Empty means detect from the labs/worker the tarball actually contains:
+    # pyproject.toml wins, then *.csproj. Set it to python or dotnet only to pin a
+    # ref that ships both. The build records the answer in /etc/workshop-stack.
+    WORKER_STACK: ""
+    # 0 downgrades the closing egress probes to warnings — use it if the preset
+    # build network is not the network the sandbox runs on.
+    WORKSHOP_STRICT_EGRESS: "1"
+
+    # LEAVE THIS EMPTY. Nothing reads it any more, and this file is now in git.
+    #
+    # It was Session 2's elevated Terraform key: creating a custom role is an
+    # Account Owner permission, so a shared service account held the delegation
+    # and the setup script re-exported this as TF_VAR_elevated_api_key for an
+    # aliased provider. Lab 2 now builds a namespace-scoped service account,
+    # which a Global Admin can create directly — labs/providers.tf has deleted
+    # the aliased provider, and nothing in any lab reads TF_VAR_elevated_api_key.
+    #
+    # The old comment here weighed pasting a key into this file against the
+    # friction of an Instruqt `secrets:` entry, and noted that the trade would
+    # change "the moment this directory is in git". That moment has happened:
+    # this preset now lives at instruqt/sandbox/ in the PUBLIC training-portal
+    # repo. A key pasted here is in that repo's history permanently, and rotating
+    # it does not remove it — and the identity it belonged to carried account-role
+    # ADMIN on the training account.
+    #
+    # So if a future lab ever needs an elevated credential again, it goes in a
+    # `secrets:` block, never here. That needs team-admin rights on Instruqt to
+    # create the underlying secret first:
+    #
+    #   instruqt secrets create WORKSHOP_ELEVATED_API_KEY <token> \
+    #     --description 'Elevated Terraform key' --team temporal
+    #
+    # The variable is kept, empty, only so a sandbox built from an older lab-repo
+    # ref still finds the name it expects. Deleting it is safe once no ref in use
+    # reads it.
+    WORKSHOP_ELEVATED_API_KEY: ""
+
+# Only labs/ is extracted from THIS repo — see the README. Everything else here is
+# the portal: the grading logic, the instructor run-book, and (since the preset
+# moved under instruqt/) this file and the setup script themselves.
+#
+# The lab repo is public, so the fetch needs no credential. If that ever changes,
+# the token goes in a `secrets:` block — never in `environment:` above, which is
+# committed to git and printed in Instruqt's debug log. A `secrets:` entry only
+# resolves a name that already exists in team settings, so create it first:
+#
+#   instruqt secrets create LAB_REPO_TOKEN <PAT> --team temporal
+#
+# then add:
+#
+#   secrets:
+#   - name: LAB_REPO_TOKEN

@@ -8,7 +8,7 @@
  * only has to be right about the code we actually ship.
  *
  * The one non-obvious behaviour is comments. Half the lab snippets are *entirely*
- * comment — they teach with a Terraform-shaped or C#-shaped fragment indented
+ * comment — they teach with a Terraform-shaped or Python-shaped fragment indented
  * inside `#` lines, because the real edit belongs in a file the student already
  * has. Colouring those as one flat block of comment would leave three of the six
  * labs looking like highlighting had failed. So an indented comment payload is
@@ -55,7 +55,7 @@ const LITERALS = new Set(['true', 'false', 'null']);
 
 /**
  * YAML 1.1 also reads these as booleans. They stay out of the shared set
- * because "no" is an ordinary English word, and the runbook prose in Session 6
+ * because "no" is an ordinary English word, and the runbook prose in Session 7
  * ("Workflow stuck, no error") is scanned as HCL.
  */
 const YAML_LITERALS = new Set(['yes', 'no', 'on', 'off', '~']);

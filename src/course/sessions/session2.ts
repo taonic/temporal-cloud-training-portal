@@ -348,12 +348,12 @@ output "worker_api_key" {
       },
       {
         label: 'Hand the Worker its own credential — do not leave the session without this',
-        required: 'Sessions 3-6 run on this file',
-        command: `cat > worker/.env <<EOF\nTEMPORAL_ADDRESS=${namespaceId}.tmprl.cloud:7233\nTEMPORAL_NAMESPACE=${namespaceId}\nTEMPORAL_API_KEY=$(terraform output -raw worker_api_key)\nEOF\n\ncd worker && dotnet run -- worker`,
+        required: 'Sessions 3-7 run on this file',
+        command: `cat > worker/.env <<EOF\nTEMPORAL_ADDRESS=${namespaceId}.tmprl.cloud:7233\nTEMPORAL_NAMESPACE=${namespaceId}\nTEMPORAL_API_KEY=$(terraform output -raw worker_api_key)\nEOF\n\ncd worker && uv run main.py worker`,
         expect:
           'The Worker starts and polls, now authenticating as the service account rather than as you. ' +
           '**This is the one step in this section the rest of the workshop depends on:** every Worker ' +
-          'you run in Sessions 3, 4, 5 and 6 reads `labs/worker/.env`, and skipping this leaves them ' +
+          'you run in Sessions 3 to 7 reads `labs/worker/.env`, and skipping this leaves them ' +
           'running on your personal admin key — which works, and quietly undoes the whole point of ' +
           'the session. Run it from `labs/`, where you ran Terraform. **It replaces ' +
           '`labs/worker/.env`**; those three lines are everything the Worker reads. The file is ' +

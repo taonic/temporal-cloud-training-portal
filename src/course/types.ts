@@ -113,7 +113,7 @@ export interface UseStep {
   expect: string;
   /**
    * Short badge text for a step the rest of the workshop depends on, e.g.
-   * "required by Sessions 3-6".
+   * "required by Sessions 3-7".
    *
    * This section is labelled *not graded*, which is honest and also an
    * invitation to skip it — and one step in Session 2 writes the credential

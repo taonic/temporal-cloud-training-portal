@@ -1,0 +1,70 @@
+slug: temporal-control-plane-workshop
+id: eyldxvngveqp
+title: Temporal Control Plane Workshop
+teaser: Provision Temporal Cloud from Terraform, encrypt every payload, roll out a
+  worker
+description: |-
+  Most Temporal training teaches you to write a Workflow. This one teaches you to **run the
+  platform underneath it**.
+
+  Over six hands-on sessions you stand up a Temporal Cloud footprint the way a platform team
+  actually would — provisioned as code, encrypted end to end, versioned on rollout, instrumented
+  for on-call — and then you deliberately break it and recover.
+
+  ### What you'll do
+
+  1. **Foundations & control plane** — Refresh the durable execution model, tour the control plane
+     (namespaces, service accounts, API keys, projects and IAM), then provision a namespace with the
+     Temporal Terraform provider instead of the UI.
+  2. **Data security & encryption** — Map what Temporal Cloud sees versus what never leaves your
+     network. Wire envelope encryption backed by a cloud key vault, deploy the encryption proxy, and
+     verify ciphertext-only egress on a real Workflow.
+  3. **AuthN/Z, RBAC & deployment patterns** — Map identity-provider groups to Temporal roles,
+     design least-privilege access with break-glass and audit paths, and decide whether Workflows and
+     Activities belong in one application or separate worker services.
+  4. **Worker config, versioning & bug-fix rollouts** — Size and tune a worker, autoscale it on
+     task-queue backlog, then ship a bug fix through Worker Versioning: new Build ID, drain the old
+     one, roll back cleanly.
+  5. **Observability & operational readiness** — Scrape the Cloud Prometheus endpoint and SDK
+     metrics into Grafana, build a Workflow-health dashboard around schedule-to-start latency,
+     sync-match rate and cache hit rate, then define one paging alert and one ticket alert.
+  6. **Troubleshooting chaos lab** — Four live failure drills: an unversioned non-deterministic
+     deploy, a task queue with every worker stopped, a broken encryption proxy, and a stuck Activity
+     with no heartbeat. Diagnose each from the symptoms, recover, and write the runbook.
+icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
+tags:
+- python
+- dotnet
+- platform-engineering
+- temporal-cloud
+- temporal
+- terraform
+- tao
+- observability
+owner: temporal
+developers:
+- tao.guo@temporal.io
+idle_timeout: 7200
+timelimit: 32400
+sandbox_preset: temporal-cloud-platform-workshop
+lab_config:
+  extend_ttl: 10800
+  sidebar_enabled: false
+  feedback_recap_enabled: true
+  feedback_tab_enabled: false
+  loadingMessages:
+  - Spinning up your sandbox. Unlike your Workflows, this bit isn't durable — please
+    don't refresh.
+  - Sleeping for a few minutes. Durably.
+  - Replaying setup step 47 of 200. Deterministically, of course.
+  - This build heartbeats. If it stops, we'll know before you do.
+  - 'our environment is on a task queue. Schedule-to-start latency: mildly embarrassing.
+    Working on it.'
+  - terraform init is running so your first command of the day can be terraform plan.
+  - Still going. Good moment to check you can reach cloud.temporal.io in a browser.
+  override_challenge_layout: false
+  hideStopButton: true
+  default_layout: AssignmentLeft
+  default_layout_sidebar_size: 35
+checksum: "3233638012024697940"
+enhanced_loading: false

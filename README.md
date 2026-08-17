@@ -228,10 +228,9 @@ the hands-on half and the exit check.
 |---|---|---|---|---|
 | 1. Foundations & Control Plane | Provision a namespace with Terraform | 5 (+1 stretch) | 0 | Control plane + data plane |
 | 2. AuthN/Z, RBAC & Deployment | The identity a Worker runs as: namespace-scoped service account, its key, operators group | 5 | 0 | Control plane + Audit Log |
-| 3. Worker Config & Versioning | Roll out v2, drain v1 | 3 | 0 | **Data plane** |
-| 4. Data Security & Encryption | temporal-proxy in front of Cloud, payloads sealed | 1 | 0 | **Data plane** |
 | 5. Observability & Ops | SDK metrics *and* Temporal Cloud OpenMetrics into one Prometheus + Grafana | 4 | 1 | Control plane + **data plane** |
-| 6. Chaos Lab | Three student drills + one demo, graded on recovery | 3 | 1 | **Data plane** |
+| 6. Nexus | Call a service in a namespace you cannot reach | 2 | 2 | **Data plane** (history) |
+| 7. Chaos Lab | Three student drills, graded on recovery | 3 | 1 | **Data plane** |
 
 Each session also has an ungraded **"Use what you built"** section: CLI commands, personalised with
 the student's own namespace and identity names, each stating what they should see. These are
@@ -242,8 +241,8 @@ costs far more than it teaches.
 Session 2's is the payoff: switch to the key the Worker would carry, run the job it exists to do,
 then discover that the two commands you assumed it could not run both succeed — and that the one
 account read it genuinely cannot perform is the Audit Log. Session 1's stretch goal is
-`labs/worker` — a C# worker and one-activity workflow, in .NET because that is what the audience
-did Temporal 101 in.
+`labs/worker` — a Python worker and one-activity workflow, run with `uv` so there is no install
+step and no virtualenv to explain.
 
 The split is not cosmetic. **Verified** means the Cloud Ops API was asked and answered.
 **Attested** means it could not be, and the student's claim is what's recorded — shown with a
@@ -255,7 +254,7 @@ so its checkpoint claims only what it can see: the namespace carries the tag `pr
 which is real control-plane state and grades automatically. What it does not prove is that Terraform
 put it there.
 
-Session 4 is the case where a better check was available. Encryption at a proxy is invisible to the
+Session 4 — parked for this cohort, but the reasoning stands — is the case where a better check was available. Encryption at a proxy is invisible to the
 control plane, so the obvious design records tags and calls it attested. Instead the grader reads the
 **payload metadata off the student's own workflow history** and asserts `encoding: binary/encrypted`
 — the ciphertext is on the data plane whether or not the control plane knows about it. That took the
@@ -313,7 +312,7 @@ operation-name list; it grades the *shape* of a record instead.
 
 ### Data-plane grading
 
-Sessions 3 to 6 grade facts the Cloud Ops API cannot see — the whole API has no worker,
+Sessions 3 to 7 grade facts the Cloud Ops API cannot see — the whole API has no worker,
 deployment, Build ID, task-queue or payload surface. `src/cloud/dataplane.ts` opens a client against the
 student's own namespace to read worker deployments, task-queue pollers and workflow status.
 
@@ -323,7 +322,7 @@ terminate a student's workflow, not merely read it. The only thing preventing th
 `NamespaceReader`, which exposes reads and nothing else and is the only thing handed out. If a
 mutating call is ever needed, add it as a separately named export so it shows up in review.
 
-Session 6's checkpoints assert the **recovered** state, never the broken one: "currently stuck" is
+Session 7's checkpoints assert the **recovered** state, never the broken one: "currently stuck" is
 true for thirty seconds and racy to grade, while "reached Completed after being stuck" is stable and
 is the actual objective. The cost is that the grader cannot prove a student broke anything first —
 drill 2 passes for someone who never stopped their workers — and the UI says so rather than
@@ -341,7 +340,7 @@ API keys appear on the big screen is the RBAC lesson that Session 2 then formali
   not that Terraform wrote it — a student who sets the tag by hand passes, and the checkpoint is
   named for what it checks so the page does not overclaim. The Audit Log gets closer than the tag
   does (see below) and Session 1's check could be rebuilt on it; that is not done yet.
-- **Two checkpoints — one each in sessions 5 and 6 — are self-attested**, each because the fact
+- **Four checkpoints — in sessions 5, 6 and 7 — are self-attested**, each because the fact
   lives in the student's sandbox (a Grafana panel, a stopped worker) and nothing reachable can
   confirm it.
   They are badged and counted separately rather than mixed into the verified total.

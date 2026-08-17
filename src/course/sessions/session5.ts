@@ -1,6 +1,6 @@
 import { namespaceTags } from '@/cloud/ops';
 import { accountRoleOf } from '@/cloud/types';
-import { LAB_BUILD_ID_V2, LAB_DEPLOYMENT_NAME, LAB_TASK_QUEUE } from '../naming';
+import { LAB_TASK_QUEUE } from '../naming';
 import type { SessionDef } from '../types';
 
 /**
@@ -113,8 +113,9 @@ export const session5: SessionDef = {
           label: 'SDK metrics reference',
           url: 'https://docs.temporal.io/references/sdk-metrics',
           note:
-            'The other half. Names here are the SDK\'s, not Cloud\'s, and the .NET exporter renames ' +
-            'them again on the way out — see the snippet below.',
+            'The other half. Names here are the SDK\'s, not Cloud\'s, and the Prometheus exporter ' +
+            'renames them again on the way out depending on how you configure it — see ' +
+            '`labs/worker/training/config.py` and the porting table in `labs/observability/README.md`.',
         },
       ],
     },
@@ -141,18 +142,19 @@ export const session5: SessionDef = {
     },
     {
       label: 'Run the worker with SDK metrics exposed',
-      command: `cd labs/worker\ndotnet run -- worker --version ${LAB_BUILD_ID_V2} --metrics-port ${METRICS_PORT}`,
+      command: `cd labs/worker\nuv run main.py worker --metrics-port ${METRICS_PORT}`,
       expect:
-        `\`SDK metrics on http://localhost:${METRICS_PORT}/metrics\`. The \`--version\` is not ` +
-        `optional: Session 3 left v${LAB_BUILD_ID_V2} as the ${LAB_DEPLOYMENT_NAME} deployment's ` +
-        'current version, and a versioned task queue hands work only to that version. Drop the flag ' +
-        'and your workflows will show up in the UI and sit there forever — pollers present, no ' +
-        'error, nothing running.',
+        `\`SDK metrics on http://localhost:${METRICS_PORT}/metrics\`, then \`Polling ` +
+        `'${LAB_TASK_QUEUE}'\`. No \`--version\` here: this cohort is not running the Worker ` +
+        'Versioning session, so there is no Worker Deployment and no current version to match. Add ' +
+        '`--version` anyway and you get the failure that session exists to teach — the worker ' +
+        'registers a version nothing routes to and is handed no tasks at all, with pollers present ' +
+        'and no error anywhere.',
       grades: 'worker-polled',
     },
     {
       label: 'Generate traffic — one workflow is a dot, fifty is a curve',
-      command: 'dotnet run -- load --count 50',
+      command: 'uv run main.py load --count 50',
       expect:
         'Fifty completed executions. Keep this handy; you will run it again once the Cloud scrape is ' +
         'live, because Cloud metrics lag ~3 minutes behind and there is nothing to see until traffic ' +
@@ -430,20 +432,21 @@ output "metrics_api_key" {
         command: 'sum(rate(temporal_workflow_task_execution_failed[5m])) or vector(0)',
         expect:
           'Zero normally. The `or vector(0)` matters: a counter that has never fired emits no series ' +
-          'at all, so without it this returns blank rather than zero. Run Session 6 drill 1 and it ' +
+          'at all, so without it this returns blank rather than zero. Run Session 7 drill 1 and it ' +
           'climbs while the workflow is neither completed nor failed — which is exactly why an alert ' +
           'on workflow failure rate would never fire.',
       },
       {
-        label: 'Both: which backlog is which version draining?',
+        label: 'Both: the opt-in label, and why it is empty today',
         command:
           `sum(temporal_cloud_v1_approximate_backlog_count{temporal_namespace=~"${namespaceName}.*"})\n  by (temporal_task_queue, temporal_worker_build_id)`,
         expect:
-          `Backlog split by Build ID — ${LAB_BUILD_ID_V2} draining, older versions flat. This only ` +
-          'works because the scrape opts in to `temporal_worker_build_id`, a high-cardinality label ' +
-          'the endpoint omits by default; the `labels` query parameter in prometheus.yml turns it ' +
-          'on. It answers the question Session 3 left open, and neither the SDK metrics nor the ' +
-          'default Cloud scrape can touch it.',
+          'A backlog with an EMPTY `temporal_worker_build_id`, because your workers are unversioned. ' +
+          'Run versioned workers and the same query splits the backlog per Build ID, which is how you ' +
+          'answer "is the version I just made current actually draining the queue?" — a question ' +
+          'neither the SDK metrics nor a default Cloud scrape can touch. The label is opt-in and ' +
+          'high-cardinality; the `labels` query parameter in prometheus.yml is what turns it on, and ' +
+          'it is already set so the panel starts working the day you adopt Worker Versioning.',
       },
     ],
     stretch: {
@@ -584,7 +587,7 @@ output "metrics_api_key" {
         completed >= 10,
         `${completed} completed execution(s).`,
         completed >= 0
-          ? `Only ${completed} completed execution(s). Run: dotnet run -- load --count 50`
+          ? `Only ${completed} completed execution(s). Run: uv run main.py load --count 50`
           : 'Could not query your namespace.',
       ),
       documented,

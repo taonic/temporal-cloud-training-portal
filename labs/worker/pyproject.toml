@@ -1,0 +1,16 @@
+[project]
+name = "training-starter"
+version = "0.1.0"
+description = "Training starter worker — Labs 1 and 3 to 6 of the Temporal Cloud platform workshop."
+requires-python = ">=3.9"
+dependencies = [
+    "temporalio>=1.18.0",
+]
+
+# Not a package. There is nothing here to install or distribute — `training/`
+# is imported from the working directory by `main.py` sitting next to it, and
+# declaring it a package would make `uv run` build a wheel on every invocation
+# for no benefit. This one line is why `uv run main.py worker` starts in about a
+# second rather than rebuilding.
+[tool.uv]
+package = false

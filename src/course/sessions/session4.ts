@@ -47,8 +47,8 @@ export const session4: SessionDef = {
 
   labSteps: [
     'In a fresh terminal, run `proxy-up`. It listens on 127.0.0.1:7233, against `labs/proxy/config.yaml`, and that file ships with `encryption: enabled: true` — every payload it forwards is sealed from the first workflow onward. Read what it prints: the proxy wants the SHORT namespace name plus the account, which is exactly what `labs/worker/.env` does not hold — `proxy-up` derives both, and `labs/proxy/README.md` has the full `docker run` if you would rather type it.',
-    `Point the worker at it: \`dotnet run -- worker --version ${LAB_BUILD_ID_V2} --proxy\` in one terminal, \`dotnet run -- start --proxy\` in another. Note what the worker no longer has — no endpoint, no TLS, no API key. **Keep the \`--version ${LAB_BUILD_ID_V2}\`**: Session 3 left v${LAB_BUILD_ID_V2} as your Worker Deployment's current version, and a versioned task queue routes new executions only to that version. An unversioned worker polls happily and is handed nothing — workflows appear in the UI and never start, with no error anywhere.`,
-    'Now the comparison. Start one more workflow **without** the proxy — `dotnet run -- start`, no flag — which connects straight to Cloud from your own process, carrying the endpoint, the namespace and your API key the way Sessions 1 and 3 did.',
+    `Point the worker at it: \`uv run main.py worker --version ${LAB_BUILD_ID_V2} --proxy\` in one terminal, \`uv run main.py start --proxy\` in another. Note what the worker no longer has — no endpoint, no TLS, no API key. **Keep the \`--version ${LAB_BUILD_ID_V2}\`**: Session 3 left v${LAB_BUILD_ID_V2} as your Worker Deployment's current version, and a versioned task queue routes new executions only to that version. An unversioned worker polls happily and is handed nothing — workflows appear in the UI and never start, with no error anywhere.`,
+    'Now the comparison. Start one more workflow **without** the proxy — `uv run main.py start`, no flag — which connects straight to Cloud from your own process, carrying the endpoint, the namespace and your API key the way Sessions 1 and 3 did.',
     'Open both workflows in the Cloud UI. The direct one shows its input as readable JSON; the proxied one is opaque bytes with `encoding: binary/encrypted` and two `encryption-*` metadata keys. Same worker, same workflow code, same namespace — the only difference is which side of the proxy the client sat on.',
     'Note what did NOT change to get that: no application code, no data converter, no key material anywhere near the worker. Encryption is on by default in `labs/proxy/config.yaml` — three lines of proxy config that the application cannot see and cannot switch off.',
     'Draft the key rotation runbook: who owns the Key Vault key, how `duration` and `renewBefore` roll DEKs, and what happens to workflows whose history was sealed under an older key.',
@@ -124,7 +124,7 @@ encryption:
       },
       {
         label: 'Watch the worker read it back perfectly well',
-        command: 'dotnet run -- start --proxy',
+        command: 'uv run main.py start --proxy',
         expect:
           'The workflow returns its greeting in cleartext. The proxy opened the payload on the way ' +
           'back, and your application never knew encryption was happening — which is why this is a ' +
@@ -136,7 +136,7 @@ encryption:
       body:
         'Stop the proxy and point a worker straight at Cloud, then try to read the encrypted ' +
         'workflow. You get ciphertext the SDK cannot decode. That is the failure mode behind the ' +
-        '"UI cannot decode payload" runbook in Session 6 — and the reason the answer there is "this ' +
+        '"UI cannot decode payload" runbook in Session 7 — and the reason the answer there is "this ' +
         'is expected", not "add a codec server".',
     },
   }),
@@ -191,7 +191,7 @@ encryption:
           : `Sampled ${samples.length} workflow(s), none tagged ${ENCRYPTED_ENCODING} (saw ${[
               ...new Set(samples.flatMap((s) => s.encodings)),
             ].join(', ')}). Only workflows started with \`--proxy\` are sealed — a direct one is stored ` +
-            `in the clear, which is the comparison the lab asks for. Run \`dotnet run -- start --proxy\` ` +
+            `in the clear, which is the comparison the lab asks for. Run \`uv run main.py start --proxy\` ` +
             `and let it complete. If it is still unsealed, check that labs/proxy/config.yaml kept ` +
             `encryption.enabled: true.`,
       ),

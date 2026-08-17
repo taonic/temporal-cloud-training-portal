@@ -18,7 +18,7 @@ scrape_configs:
     scheme: http
     static_configs:
       # The worker's Prometheus endpoint, on the host rather than in a container:
-      #   dotnet run -- worker --metrics-port 9464
+      #   uv run main.py worker --metrics-port 9464
       - targets: ['host.docker.internal:9464']
         labels:
           group: 'sdk-metrics'
@@ -91,8 +91,10 @@ scrape_configs:
 
       # Opt-in labels, off by default because they are high-cardinality. These
       # two put a Build ID on the backlog metric, which is how you answer "is
-      # the version I just made current actually draining the queue?" — the
-      # Session 3 question the SDK metrics could not answer.
+      # the version I just made current actually draining the queue?" — a
+      # question the SDK metrics cannot answer at all. They come back empty
+      # while your workers are unversioned; set now so the panel works the day
+      # you adopt Worker Versioning.
       labels: ['temporal_worker_deployment_name', 'temporal_worker_build_id']
 
     authorization:

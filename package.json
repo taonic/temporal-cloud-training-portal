@@ -20,7 +20,8 @@
     "check:names": "tsx scripts/check-names.ts",
     "proto:vendor": "node scripts/vendor-protos.mjs",
     "ops:preflight": "tsx scripts/preflight.ts",
-    "ops:extend": "tsx scripts/extend-access.ts"
+    "ops:extend": "tsx scripts/extend-access.ts",
+    "ops:nexus-allowlist": "tsx scripts/nexus-allowlist.ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.12.5",
