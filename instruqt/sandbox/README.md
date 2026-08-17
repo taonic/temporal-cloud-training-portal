@@ -26,9 +26,8 @@ sandbox must build from a pushed ref, so what a student gets is what is committe
 rather than whatever is on the machine that ran the push.
 
 Everything `PREREQUISITES.md` asks attendees to install is installed here, and
-`terraform init`, the worker build (`uv sync` and/or `dotnet restore` + `build`)
-and the Docker image pulls are all done at build time, so Session 1 starts at
-`terraform plan`.
+`terraform init`, the worker build (`uv sync`) and the Docker image pulls are all
+done at build time, so Session 1 starts at `terraform plan`.
 
 ## What's in the box
 
@@ -38,7 +37,6 @@ and the Docker image pulls are all done at build time, so Session 1 starts at
 | `temporal cloud` extension 0.0.3 (separate binary) | Sessions 1, 2 |
 | Terraform 1.15.8 | Sessions 1, 2 |
 | Python 3.12 + uv 0.12.5 | Sessions 1, 3–6 (`labs/worker`) |
-| .NET SDK 8 | Sessions 1, 3–6 (`labs/worker`) |
 | Docker + Compose v5.4.0 | Sessions 7, 5 |
 | `prom/prometheus:v3.1.0` + `grafana/grafana:11.5.1` | Session 3 |
 | code-server 4.131.0 on `:8443` | all sessions |
@@ -50,27 +48,21 @@ install. Helpers on `PATH`: `workshop-creds`, `workshop-check`, `workshop-help`,
 `dev-server-up`/`dev-server-down`, and `restore-labs` (instructor-only — see
 Recovery).
 
-## Two worker stacks, one set of commands
+## One worker stack
 
-`labs/worker` is being moved from C# to Python in the lab repo, so **both
-toolchains are installed** and the preset works against either ref. A sandbox that
-knew only one of them would turn a lab-repo commit into a broken track.
+`labs/worker` is Python, run through uv. The .NET SDK, the `WORKER_STACK` knob and
+`/etc/workshop-stack` are gone with the C# worker they carried through the
+migration — a labs/worker with no `pyproject.toml` now fails the build outright,
+because there is no second stack left to fall back to.
 
-Which one is used is decided at build time from the tarball that was actually
-extracted — `pyproject.toml` wins, then `*.csproj` — and recorded in
-`/etc/workshop-stack`. `WORKER_STACK=python|dotnet` in `config.yml` pins it
-instead, and the build fails loudly if the named stack is not in the repo.
-
-`worker-run` is the dispatcher, and it exists because the two workers take an
-identical command surface — `worker`, `start`, `load`, `chaos`, same flags:
+`worker-run` survives as a runner rather than a dispatcher: it `cd`s into
+`labs/worker` so the shortcuts work from any directory, and it prints the real
+command before running it, so a student comparing the terminal against their
+session page sees the same words the page does.
 
 ```bash
-worker-run worker                  # -> uv run lab1_hello.py worker
-WORKER_STACK=dotnet rw             # override for one command
+worker-run lab1_hello.py worker    # -> uv run lab1_hello.py worker
 ```
-
-It prints the real command before running it, so a student comparing the terminal
-against their session page sees the same words the page does.
 
 `rw`, `rs`, `rl` and `rm5` are **shell functions** rather than aliases, which is
 not cosmetic: an alias appends what you typed after the closing paren, so
@@ -91,11 +83,9 @@ the managed interpreter install, `uv sync --locked` against the committed
 lockfile, and an offline `import temporalio` — was verified end to end in an
 `ubuntu:24.04` container before this landed.
 
-Both stacks are pre-warmed when both are present, so `WORKER_STACK` stays usable
-on the day rather than costing a NuGet restore or a `uv sync` at 09:05. The
-closing health checks verify **both** toolchains and the built artifact of
-whichever stack shipped — the unused one is checked precisely because it is
-unused, so a stack switch in the lab repo needs no preset change.
+The venv is built at preset-build time rather than costing a `uv sync` at 09:05,
+and the closing health checks confirm it can `import temporalio` offline — a venv
+that exists and cannot import the SDK is otherwise a failure the room finds first.
 
 ## Recovery
 
@@ -159,12 +149,10 @@ defaults.
 | `LAB_REPO_URL` | `https://github.com/taonic/temporal-cloud-training-portal.git` | repo holding `labs/` |
 | `LAB_REPO_REF` | `taonic/python` | branch, tag or SHA. A slashed branch name is qualified to `refs/heads/…` before it reaches GitHub's tarball endpoint, which 504s on the bare form |
 | `WORKSHOP_DIR` | `/workspace/workshop` | clone target; code-server opens it |
-| `WORKER_STACK` | *empty* | `python` \| `dotnet`. Empty detects from `labs/worker`; see above |
 | `TEMPORAL_CLI_VERSION` | `1.8.2` | |
 | `TERRAFORM_VERSION` | `1.15.8` | |
 | `UV_VERSION` | `0.12.5` | from `astral-sh/uv`; each asset ships its own `.sha256` |
 | `PYTHON_VERSION` | `3.12` | must match `labs/worker/.python-version` |
-| `DOTNET_CHANNEL` | `8.0` | |
 | `COMPOSE_VERSION` | `v5.4.0` | only used if the base image lacks Compose v2 |
 | `CODE_SERVER_VERSION` | `4.131.0` | |
 | `CLOUD_CLI_VERSION` | `0.0.3` | pre-release from `temporalio/cloud-cli` |

@@ -11,7 +11,7 @@ notes:
     ## This sandbox replaces your laptop, not your browser
 
     Every tool the workshop needs — the Temporal CLI and its `cloud` extension,
-    Terraform, Python 3.12 with `uv`, .NET 8, Docker — is already installed here,
+    Terraform, Python 3.12 with `uv`, Docker — is already installed here,
     already at the right version, with `terraform init` and the worker build
     already run.
 

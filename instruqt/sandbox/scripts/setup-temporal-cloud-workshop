@@ -10,20 +10,16 @@
 #   temporal cloud extension      Sessions 1, 2   (a SEPARATE binary)
 #   Terraform 1.5+                Sessions 1, 2
 #   Python 3.12 + uv              Sessions 1, 3, 4, 5, 6   (labs/worker)
-#   .NET SDK 8                    Sessions 1, 3, 4, 5, 6   (labs/worker)
 #   Docker + Compose              Sessions 4, 5
 #   temporalio/temporal-proxy     Session 4
 #   Prometheus + Grafana images   Session 5
 #   git clone of the lab repo     all sessions
 #
-# BOTH worker toolchains are installed, on purpose. labs/worker is being moved
-# from C# to Python in the lab repo, and this preset has to work against either
-# ref while that lands — a sandbox that only knows one of them turns a lab-repo
-# commit into a broken track. Detection is by what the fetched tarball actually
-# contains (pyproject.toml -> Python, *.csproj -> .NET); the pre-warm builds
-# whichever is there, and `worker-run` dispatches on the same rule, so `rw`, `rs`
-# and the session pages' commands mean the same thing either way. Force one with
-# WORKER_STACK=python|dotnet.
+# ONE worker toolchain: Python 3.12 via uv. The lab repo's C# worker is gone and
+# so is the dual-stack machinery that carried the migration — no .NET SDK, no
+# WORKER_STACK knob, no /etc/workshop-stack. A fetched labs/worker without a
+# pyproject.toml now fails the build rather than falling back to anything, which
+# is the honest failure: there is no second stack left to fall back to.
 #
 # The VM opens `high-ports` in config.yml; the track's assignment.md turns these
 # into service tabs:
@@ -39,7 +35,7 @@
 #
 # Everything the labs touch outbound is what PREREQUISITES.md lists:
 # *.tmprl.cloud:7233, saas-api.tmprl.cloud:443, cloud.temporal.io:443, the
-# training portal, registry.terraform.io, pypi.org, api.nuget.org, *.docker.io,
+# training portal, registry.terraform.io, pypi.org, *.docker.io,
 # github.com. (github.com is also where uv fetches its managed CPython build
 # from — astral-sh/python-build-standalone — so it is not only the lab repo.)
 # The final health check probes the two that matter and fails loudly — set
@@ -59,8 +55,8 @@ done
 # ─── Versions and knobs ───────────────────────────────────────────────────────
 # Override any of these from the Instruqt track config.
 
-# The repo holding labs/ — Terraform files, the C# worker, the proxy config and
-# the observability stack. LAB_REPO_TOKEN arrives as an Instruqt secret, never
+# The repo holding labs/ — Terraform files, the Python worker, the proxy config
+# and the observability stack. LAB_REPO_TOKEN arrives as an Instruqt secret, never
 # from config.yml's environment block; tr strips the carriage return a token
 # pasted from Windows carries into the UI.
 LAB_REPO_URL="${LAB_REPO_URL:-https://github.com/taonic/temporal-cloud-training-portal.git}"
@@ -85,13 +81,8 @@ UV_VERSION="${UV_VERSION:-0.12.5}"
 # Pinned here as well so the interpreter is downloaded at build time rather than
 # at 09:05 in front of the room.
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
-DOTNET_CHANNEL="${DOTNET_CHANNEL:-8.0}"
 COMPOSE_VERSION="${COMPOSE_VERSION:-v5.4.0}"
 
-# Which stack `worker-run` (and therefore rw / rs / rm5) uses. Empty means
-# detect from labs/worker: pyproject.toml wins, then *.csproj. Set it to python
-# or dotnet only to override a repo that ships both.
-WORKER_STACK="${WORKER_STACK:-}"
 CODE_SERVER_VERSION="${CODE_SERVER_VERSION:-4.131.0}"
 # The Cloud extension is Pre-release and Homebrew-only in the docs. It also
 # publishes plain Linux tarballs, which is the path used here — no brew, no Go
@@ -142,17 +133,16 @@ verify_sha256() {
 # ─── Base packages ────────────────────────────────────────────────────────────
 export DEBIAN_FRONTEND=noninteractive
 
-# libicu-dev: .NET refuses to start without ICU unless you run it in invariant
-# globalization mode. netcat-openbsd: the `nc -z` egress checks below, and the
-# one PREREQUISITES.md asks attendees to run.
+# netcat-openbsd: the `nc -z` egress checks below, and the one PREREQUISITES.md
+# asks attendees to run.
 #
 # Nothing here is for Python. uv's managed CPython is a self-contained build
 # (astral-sh/python-build-standalone) and needs no libpython, no build-essential
-# and no -dev headers — which is why adding the second worker toolchain costs two
-# downloads rather than an apt tree.
+# and no -dev headers — which is why the whole worker toolchain is one download
+# rather than an apt tree.
 apt-get update && apt-get install -y --no-install-recommends \
     wget curl git vim nano unzip zip jq ca-certificates gnupg \
-    bash-completion netcat-openbsd dnsutils fontconfig libicu-dev
+    bash-completion netcat-openbsd dnsutils fontconfig
 
 # ─── Temporal CLI ─────────────────────────────────────────────────────────────
 # The release tarball rather than `curl https://temporal.download/cli.sh | sh`:
@@ -206,28 +196,9 @@ chmod +x /usr/local/bin/terraform
 
 terraform version
 
-# ─── .NET SDK 8 ───────────────────────────────────────────────────────────────
-# One of the two worker toolchains — see the header. Installed unconditionally
-# rather than only when the fetched labs/worker turns out to be C#, because the
-# lab repo is fetched AFTER this point and an install that depends on it would
-# make the build order the thing that decides whether a stack works.
-#
-# dotnet-install.sh rather than apt: it works the same on every Ubuntu base
-# image and pins to a channel rather than to whatever the distro feed carries.
-export DOTNET_ROOT=/usr/share/dotnet
-export DOTNET_CLI_TELEMETRY_OPTOUT=1
-export DOTNET_NOLOGO=1
-export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
-
-curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-bash /tmp/dotnet-install.sh --channel "$DOTNET_CHANNEL" --install-dir "$DOTNET_ROOT"
-rm -f /tmp/dotnet-install.sh
-ln -sf "$DOTNET_ROOT/dotnet" /usr/local/bin/dotnet
-
-dotnet --list-sdks
-
 # ─── Python 3.12 via uv ───────────────────────────────────────────────────────
-# The other worker toolchain, same reasoning: installed either way.
+# The worker toolchain, and the only one. Installed before the lab repo is
+# fetched, because the fetch is what decides nothing here — there is one stack.
 #
 # The release tarball at a pinned version, not `curl astral.sh/uv/install.sh | sh`
 # — same reasoning as the Temporal CLI above, and the installer would drop uv in
@@ -425,75 +396,44 @@ done
 [ -f "$WORKSHOP_DIR/labs/worker/.env" ] \
     || cp "$WORKSHOP_DIR/labs/worker/.env.example" "$WORKSHOP_DIR/labs/worker/.env"
 
-# ─── Which worker stack did the lab repo ship? ────────────────────────────────
-# Decided once, here, from the tarball that was actually extracted — then written
-# to /etc/workshop-stack so `worker-run`, `workshop-check` and the closing health
-# checks all read the same answer instead of each re-deriving it.
-#
-# pyproject.toml wins if both are present. That is the direction the lab repo is
-# moving, and "both" only happens mid-migration.
+# ─── The worker the lab repo shipped ──────────────────────────────────────────
+# One stack, so this is an assertion rather than a decision. A labs/worker with no
+# pyproject.toml means the fetched ref predates the Python worker (LAB_REPO_REF
+# pointing at an old branch is the likely cause), and failing here is far cheaper
+# than a room discovering it at `uv run`.
 WORKER_DIR="$WORKSHOP_DIR/labs/worker"
-HAS_PYTHON=0; HAS_DOTNET=0
-[ -f "$WORKER_DIR/pyproject.toml" ] && HAS_PYTHON=1
-compgen -G "$WORKER_DIR/*.csproj" > /dev/null && HAS_DOTNET=1
-
-if [ -n "$WORKER_STACK" ]; then
-    case "$WORKER_STACK" in
-        python) [ "$HAS_PYTHON" = 1 ] || { echo "ERROR: WORKER_STACK=python but $WORKER_DIR has no pyproject.toml"; exit 1; } ;;
-        dotnet) [ "$HAS_DOTNET" = 1 ] || { echo "ERROR: WORKER_STACK=dotnet but $WORKER_DIR has no .csproj"; exit 1; } ;;
-        *) echo "ERROR: WORKER_STACK must be python or dotnet, got '$WORKER_STACK'"; exit 1 ;;
-    esac
-elif [ "$HAS_PYTHON" = 1 ]; then
-    WORKER_STACK=python
-elif [ "$HAS_DOTNET" = 1 ]; then
-    WORKER_STACK=dotnet
-else
-    echo "ERROR: $WORKER_DIR has neither pyproject.toml nor a .csproj — the lab"
-    echo "       repo's worker is neither stack this preset knows how to build."
+if [ ! -f "$WORKER_DIR/pyproject.toml" ]; then
+    echo "ERROR: $WORKER_DIR has no pyproject.toml — the fetched lab repo does not"
+    echo "       ship the Python worker. Check LAB_REPO_REF ($LAB_REPO_REF)."
     exit 1
 fi
-
-echo "Worker stack: $WORKER_STACK (python=$HAS_PYTHON dotnet=$HAS_DOTNET)"
-printf 'WORKER_STACK=%s\n' "$WORKER_STACK" > /etc/workshop-stack
 
 # ─── Pre-warm Terraform and the worker toolchain ──────────────────────────────
 # `terraform init` is the only Terraform setup step in the lab, and it is a
 # network download. Do it now so Session 1 starts at `terraform plan`.
 (cd "$WORKSHOP_DIR/labs" && terraform init -input=false -upgrade)
 
-# Both stacks are warmed if both are present, not just the selected one. A build
-# that only warms the default leaves WORKER_STACK=dotnet as a knob that silently
-# costs a minute of NuGet at 09:05 — and the whole point of the knob is to be
-# usable on the day.
-if [ "$HAS_PYTHON" = 1 ]; then
-    # Create labs/worker/.venv from the committed uv.lock here, and the student's
-    # first `uv run lab1_hello.py worker` starts in about a second instead of resolving
-    # and downloading temporalio.
-    #
-    # --locked first: it asserts uv.lock is in sync with pyproject.toml, and the
-    # preset build is the cheap place to discover that it is not. Not fatal,
-    # deliberately — the lockfile may have been written by an older uv than the one
-    # pinned here, and a lockfile-revision nit is not a reason to fail a whole
-    # track. So fall back to --frozen (install exactly what the lock says, no
-    # re-resolution) and say so loudly enough to find in the build log.
-    if ! (cd "$WORKER_DIR" && uv sync --locked); then
-        echo "WARN: uv.lock is not in sync with pyproject.toml (or was written by an"
-        echo "      incompatible uv). Installing from the lock as-is with --frozen."
-        (cd "$WORKER_DIR" && uv sync --frozen)
-    fi
-
-    # Prove the environment imports the SDK rather than merely existing. --offline
-    # also exercises the no-network path: the lock is satisfied by now, so a
-    # student's first run should not reach out for anything.
-    (cd "$WORKER_DIR" \
-        && uv run --offline python -c 'import temporalio; print("temporalio", temporalio.__version__)')
+# Create labs/worker/.venv from the committed uv.lock here, and the student's
+# first `uv run lab1_hello.py worker` starts in about a second instead of resolving
+# and downloading temporalio.
+#
+# --locked first: it asserts uv.lock is in sync with pyproject.toml, and the
+# preset build is the cheap place to discover that it is not. Not fatal,
+# deliberately — the lockfile may have been written by an older uv than the one
+# pinned here, and a lockfile-revision nit is not a reason to fail a whole
+# track. So fall back to --frozen (install exactly what the lock says, no
+# re-resolution) and say so loudly enough to find in the build log.
+if ! (cd "$WORKER_DIR" && uv sync --locked); then
+    echo "WARN: uv.lock is not in sync with pyproject.toml (or was written by an"
+    echo "      incompatible uv). Installing from the lock as-is with --frozen."
+    (cd "$WORKER_DIR" && uv sync --frozen)
 fi
 
-if [ "$HAS_DOTNET" = 1 ]; then
-    # Same argument for NuGet: restore + build once here, and `dotnet run` in
-    # Session 1 is a second rather than a minute.
-    (cd "$WORKER_DIR" && dotnet restore && dotnet build -c Debug --nologo)
-fi
+# Prove the environment imports the SDK rather than merely existing. --offline
+# also exercises the no-network path: the lock is satisfied by now, so a
+# student's first run should not reach out for anything.
+(cd "$WORKER_DIR" \
+    && uv run --offline python -c 'import temporalio; print("temporalio", temporalio.__version__)')
 
 # ─── code-server ──────────────────────────────────────────────────────────────
 # The published .deb at a pinned version, not `install.sh | sh`. Installed with
@@ -508,15 +448,11 @@ code-server --version
 
 mkdir -p /root/.local/share/code-server/User
 
-# Written for both worker stacks, because the editor config cannot know which one
-# the tarball brought and there is no cost to carrying both: bin/obj and
-# __pycache__/.venv are all noise, whichever is present.
-#
 # python.defaultInterpreterPath points at the venv `uv sync` creates, so the editor
 # resolves `import temporalio` instead of underlining it in red against the system
 # interpreter — cosmetic, but it reads to a student as "my worker is broken". The
-# per-language tabSize entries matter for the same reason in reverse: 4 for Python
-# and C#, 2 for the .tf and .yaml files they sit next to.
+# per-language tabSize entries matter for the same reason in reverse: 4 for Python,
+# 2 for the .tf and .yaml files it sits next to.
 cat > /root/.local/share/code-server/User/settings.json <<EOF
 {
     "workbench.colorTheme": "Default Dark+",
@@ -529,8 +465,6 @@ cat > /root/.local/share/code-server/User/settings.json <<EOF
         "**/__pycache__": true,
         "**/.venv": true,
         "**/.ruff_cache": true,
-        "**/bin": true,
-        "**/obj": true,
         "**/.terraform": true,
         "**/node_modules": true,
         "**/.next": true
@@ -539,7 +473,6 @@ cat > /root/.local/share/code-server/User/settings.json <<EOF
     "terminal.integrated.scrollback": 20000,
     "python.defaultInterpreterPath": "$WORKSHOP_DIR/labs/worker/.venv/bin/python",
     "python.terminal.activateEnvironment": false,
-    "omnisharp.useModernNet": true,
     "[terraform]": { "editor.tabSize": 2 },
     "[yaml]": { "editor.tabSize": 2 },
     "workbench.activityBar.visible": true,
@@ -549,15 +482,13 @@ cat > /root/.local/share/code-server/User/settings.json <<EOF
 EOF
 
 # Open VSX rather than the Microsoft marketplace, which code-server cannot use.
-# muhammad-sammy.csharp is the C# extension republished there (ms-dotnettools.* is
-# not available at all); ms-python.python IS mirrored, but its language server
+# ms-python.python IS mirrored there, but its language server
 # ms-python.vscode-pylance is not, and is licensed so that it cannot be —
-# basedpyright is the drop-in that is. Both stacks' extensions are installed for
-# the same reason both toolchains are.
+# basedpyright is the drop-in that is.
 #
 # Non-fatal: a missing extension costs syntax highlighting, not a lab, and Open VSX
 # availability is not something to fail a track on.
-for ext in ms-python.python detachhead.basedpyright muhammad-sammy.csharp hashicorp.terraform redhat.vscode-yaml; do
+for ext in ms-python.python detachhead.basedpyright hashicorp.terraform redhat.vscode-yaml; do
     /usr/bin/code-server --install-extension "$ext" || echo "WARN: could not install $ext"
 done
 
@@ -637,7 +568,7 @@ systemctl disable temporal-dev || true
 # Students get a namespace, an account and an API key from the training portal
 # at the start of Session 1 — none of it can be baked into the image. This
 # writes all four variables to the two places that read them: the shell (both
-# CLIs and the Terraform provider) and labs/worker/.env (the C# worker).
+# CLIs and the Terraform provider) and labs/worker/.env (the Python worker).
 cat > /usr/local/bin/workshop-creds <<'EOF'
 #!/bin/bash
 # Point this sandbox at your Temporal Cloud namespace.
@@ -724,7 +655,6 @@ for probe in \
     "temporal cloud:temporal cloud --help" \
     "terraform:terraform version" \
     "uv:uv --version" \
-    "dotnet:dotnet --version" \
     "docker:docker info" \
     "docker compose:docker compose version" \
     "git:git --version"
@@ -733,38 +663,19 @@ do
     if $cmd > /dev/null 2>&1; then ok "$name"; else bad "$name"; fi
 done
 
-# Both toolchains are installed, but only the stack labs/worker actually ships is
-# built — so probe the built artifact of that one and say which it is. The stack
-# is whatever the preset build recorded; worker-run reads the same file.
 echo
 echo "Worker (labs/worker)"
 WORKER_DIR="${WORKSHOP_DIR:-/workspace/workshop}/labs/worker"
-# An exported WORKER_STACK wins over the recorded one, exactly as in worker-run.
-STACK="${WORKER_STACK:-$(. /etc/workshop-stack 2>/dev/null; echo "${WORKER_STACK:-}")}"
-case "$STACK" in
-    python)
-        # `uv run` is what every lab command actually starts with, so probe that
-        # rather than `python --version` — and --offline, so a green tick means the
-        # venv and the cache are both already warm and the student's first run does
-        # not go to the network.
-        if v="$(cd "$WORKER_DIR" 2>/dev/null && uv run --offline python -c \
-            'import platform, temporalio; print(platform.python_version(), temporalio.__version__)' 2>/dev/null)"; then
-            ok "python ${v% *} + temporalio ${v#* } (uv)"
-        else
-            bad "python env not usable — rebuild: cd $WORKER_DIR && uv sync"
-        fi
-        ;;
-    dotnet)
-        if [ -f "$WORKER_DIR/bin/Debug/net8.0/TrainingStarter.dll" ]; then
-            ok "built — bin/Debug/net8.0/TrainingStarter.dll"
-        else
-            bad "not built — rebuild: cd $WORKER_DIR && dotnet build"
-        fi
-        ;;
-    *)
-        warn "no stack recorded in /etc/workshop-stack — worker-run will detect one"
-        ;;
-esac
+# `uv run` is what every lab command actually starts with, so probe that rather
+# than `python --version` — and --offline, so a green tick means the venv and the
+# cache are both already warm and the student's first run does not go to the
+# network.
+if v="$(cd "$WORKER_DIR" 2>/dev/null && uv run --offline python -c \
+    'import platform, temporalio; print(platform.python_version(), temporalio.__version__)' 2>/dev/null)"; then
+    ok "python ${v% *} + temporalio ${v#* } (uv)"
+else
+    bad "python env not usable — rebuild: cd $WORKER_DIR && uv sync"
+fi
 
 echo
 echo "Outbound network (PREREQUISITES.md 'most likely to be blocked')"
@@ -777,12 +688,11 @@ if nc -z -w 5 ap-southeast-2.aws.api.temporal.io 7233 2>/dev/null; then
 else
     bad "gRPC to Temporal Cloud on 7233 — nothing in this workshop connects"
 fi
-# Both package feeds, because both worker stacks are supported and either one can
-# be the one a student needs. pypi.org and files.pythonhosted.org are a pair: the
-# first serves the index, the second serves the wheels, and only one of them being
-# open is a `uv sync` that resolves and then fails to download — which reads like a
-# broken package rather than like a firewall.
-for hostport in saas-api.tmprl.cloud:443 registry.terraform.io:443 pypi.org:443 files.pythonhosted.org:443 api.nuget.org:443 registry-1.docker.io:443 github.com:443; do
+# pypi.org and files.pythonhosted.org are a pair: the first serves the index, the
+# second serves the wheels, and only one of them being open is a `uv sync` that
+# resolves and then fails to download — which reads like a broken package rather
+# than like a firewall.
+for hostport in saas-api.tmprl.cloud:443 registry.terraform.io:443 pypi.org:443 files.pythonhosted.org:443 registry-1.docker.io:443 github.com:443; do
     if nc -z -w 5 "${hostport%%:*}" "${hostport##*:}" 2>/dev/null; then ok "$hostport"; else bad "$hostport"; fi
 done
 
@@ -836,27 +746,23 @@ echo
 EOF
 chmod +x /usr/local/bin/workshop-check
 
-# ─── Worker dispatcher ────────────────────────────────────────────────────────
-# One command that means the same thing whichever stack labs/worker ships:
+# ─── Worker runner ────────────────────────────────────────────────────────────
+# One command that runs a labs/worker entrypoint from anywhere:
 #
 #   worker-run lab1_hello.py worker   ->  uv run lab1_hello.py worker
-#                                     or  dotnet run -- lab1_hello worker
+#
+# It survives the .NET removal as a `cd` plus an echo rather than a dispatcher —
+# the cd is what lets rw / rs / rm5 work from any directory, and the echo is what
+# stops it being a black box: it prints the real command first, because a student
+# comparing the sandbox against the session page needs to see the same words.
 #
 # The Python starter has one entrypoint per lab (lab1_hello.py, lab3_metrics.py,
-# lab4_review.py, lab5_chaos.py), so the script name is the FIRST argument rather
-# than something this helper picks. That keeps it stack-agnostic and keeps the
-# words identical to the session page — which is the whole point of it. What it
-# deliberately does NOT do is hide which one ran: it prints the real command
-# first, because a student comparing the sandbox against the page needs to see
-# the same words.
+# lab4_review.py, lab5_chaos.py), so the script name is the FIRST argument.
 cat > /usr/local/bin/worker-run <<'EOF'
 #!/bin/bash
-# Run a labs/worker command on whichever stack the lab repo shipped.
+# Run a labs/worker command.
 #
 #   worker-run <script> <command> [flags...]
-#
-# Stack selection, in order: an exported WORKER_STACK, then the value the preset
-# recorded in /etc/workshop-stack, then detection (pyproject.toml, then *.csproj).
 set -euo pipefail
 
 WORKSHOP_DIR="${WORKSHOP_DIR:-/workspace/workshop}"
@@ -864,43 +770,10 @@ WORKER_DIR="$WORKSHOP_DIR/labs/worker"
 
 [ -d "$WORKER_DIR" ] || { echo "ERROR: $WORKER_DIR does not exist." >&2; exit 1; }
 cd "$WORKER_DIR"
+[ -f pyproject.toml ] || { echo "ERROR: no pyproject.toml in $WORKER_DIR." >&2; exit 1; }
 
-stack="${WORKER_STACK:-}"
-if [ -z "$stack" ] && [ -f /etc/workshop-stack ]; then
-    . /etc/workshop-stack
-    stack="${WORKER_STACK:-}"
-fi
-if [ -z "$stack" ]; then
-    if [ -f pyproject.toml ]; then
-        stack=python
-    elif compgen -G '*.csproj' > /dev/null; then
-        stack=dotnet
-    else
-        echo "ERROR: $WORKER_DIR has neither pyproject.toml nor a .csproj." >&2
-        exit 1
-    fi
-fi
-
-case "$stack" in
-    python)
-        [ -f pyproject.toml ] || { echo "ERROR: WORKER_STACK=python but there is no pyproject.toml in $WORKER_DIR." >&2; exit 1; }
-        echo "+ uv run $*"
-        exec uv run "$@"
-        ;;
-    dotnet)
-        compgen -G '*.csproj' > /dev/null || { echo "ERROR: WORKER_STACK=dotnet but there is no .csproj in $WORKER_DIR." >&2; exit 1; }
-        # The .NET starter keeps a single entrypoint, so drop the .py script
-        # name the Python side needs and pass the rest through.
-        first="${1:-}"
-        case "$first" in *.py) shift ;; esac
-        echo "+ dotnet run -- $*"
-        exec dotnet run -- "$@"
-        ;;
-    *)
-        echo "ERROR: WORKER_STACK must be python or dotnet, got '$stack'." >&2
-        exit 1
-        ;;
-esac
+echo "+ uv run $*"
+exec uv run "$@"
 EOF
 chmod +x /usr/local/bin/worker-run
 
@@ -1200,9 +1073,6 @@ chmod +x /usr/local/bin/restore-labs
 
 # ─── Shell environment ────────────────────────────────────────────────────────
 cat >> /etc/environment <<EOF
-DOTNET_ROOT=$DOTNET_ROOT
-DOTNET_CLI_TELEMETRY_OPTOUT=1
-DOTNET_NOLOGO=1
 UV_PYTHON_INSTALL_DIR=$UV_PYTHON_INSTALL_DIR
 UV_CACHE_DIR=$UV_CACHE_DIR
 UV_PYTHON_PREFERENCE=$UV_PYTHON_PREFERENCE
@@ -1215,10 +1085,7 @@ touch /root/.workshop-env
 chmod 600 /root/.workshop-env
 
 cat >> /root/.bashrc <<EOF
-export PATH="\$PATH:/root/.temporalio/bin:/usr/local/bin:$DOTNET_ROOT"
-export DOTNET_ROOT=$DOTNET_ROOT
-export DOTNET_CLI_TELEMETRY_OPTOUT=1
-export DOTNET_NOLOGO=1
+export PATH="\$PATH:/root/.temporalio/bin:/usr/local/bin"
 
 # uv reads these three. They have to match what the preset build used, or the
 # first \`uv run\` in a student's terminal looks in an empty interpreter directory
@@ -1229,14 +1096,6 @@ export UV_PYTHON_PREFERENCE=$UV_PYTHON_PREFERENCE
 
 export TEMPORAL_ACCOUNT=$TEMPORAL_ACCOUNT
 export WORKSHOP_DIR=$WORKSHOP_DIR
-
-# Which stack labs/worker shipped, as recorded by the preset build. worker-run
-# (and therefore rw / rs / rm5) reads this; export a different value to override
-# it for one terminal, e.g. WORKER_STACK=dotnet rw.
-if [ -z "\${WORKER_STACK:-}" ] && [ -f /etc/workshop-stack ]; then
-    . /etc/workshop-stack
-    export WORKER_STACK
-fi
 
 # Session 2 only. A shared service account holds the delegation that lets a
 # custom role be created at all — Global Admin cannot, and granting a student
@@ -1260,10 +1119,10 @@ alias worker='cd $WORKSHOP_DIR/labs/worker'
 
 # Functions, not aliases, and that is the whole point: an alias appends the words
 # you typed AFTER the closing paren, so `rw --version 2.0` used to expand to
-# `(cd … && dotnet run -- worker) --version 2.0` and silently drop the flag on the
+# `(cd … && uv run worker) --version 2.0` and silently drop the flag on the
 # floor. From Lab 3 on, dropping --version means a worker that polls forever and
 # is handed nothing — the single most expensive way to lose twenty minutes in this
-# workshop. worker-run picks python or dotnet; see /etc/workshop-stack.
+# workshop.
 rw()  { worker-run worker "$@"; }
 rs()  { worker-run start "$@"; }
 rl()  { worker-run load "$@"; }
@@ -1280,17 +1139,6 @@ EOF
 # A real command rather than only an MOTD file, because students live in
 # code-server's terminal, which is not an SSH login shell and never renders
 # /etc/update-motd.d. The MOTD hook just calls this.
-# $WORKER_STACK and the run line are baked in at build time rather than resolved
-# per invocation: the banner should tell a student which worker they have before
-# they discover it from an error message.
-case "$WORKER_STACK" in
-    python) WORKER_RUN_EXAMPLE='uv run lab1_hello.py worker' ;;
-    dotnet) WORKER_RUN_EXAMPLE='dotnet run -- worker' ;;
-    # Unreachable — the detection above exits on anything else. Present so the
-    # heredoc below cannot fail on an unset variable under `set -u`.
-    *)      WORKER_RUN_EXAMPLE='worker-run worker' ;;
-esac
-
 cat > /usr/local/bin/workshop-help <<EOF
 #!/bin/sh
 cat <<'BANNER'
@@ -1300,9 +1148,9 @@ cat <<'BANNER'
   Everything PREREQUISITES.md asks for is already installed. Labs are in
   $WORKSHOP_DIR/labs — terraform init and the worker build are already done.
 
-  labs/worker is the $WORKER_STACK one, so the session pages' worker commands read
-  \`$WORKER_RUN_EXAMPLE\`. \`worker-run worker\` and the rw / rs shortcuts below
-  work whichever stack it is.
+  labs/worker is Python, run through uv — the session pages' worker commands read
+  \`uv run lab1_hello.py worker\`, and \`worker-run\` runs the same thing from
+  any directory.
 
   First thing, once Session 1 gives you a namespace and an API key:
 
@@ -1347,15 +1195,10 @@ terraform version > /dev/null         || { echo "ERROR: terraform"; exit 1; }
 docker info > /dev/null               || { echo "ERROR: docker daemon"; exit 1; }
 docker compose version > /dev/null    || { echo "ERROR: docker compose plugin"; exit 1; }
 
-# BOTH worker toolchains, regardless of which one labs/worker ships today. The
-# reason to check the unused one is precisely that it is unused: it is there so a
-# lab-repo commit that switches stacks does not need a preset change, and an
-# install that quietly broke would only surface on that commit.
-dotnet --list-sdks | grep -q '^8\.'   || { echo "ERROR: .NET SDK 8 not installed"; exit 1; }
 uv --version > /dev/null              || { echo "ERROR: uv not installed"; exit 1; }
 uv python list --only-installed | grep -q "cpython-${PYTHON_VERSION}\." \
     || { echo "ERROR: uv has no managed CPython $PYTHON_VERSION"; exit 1; }
-[ -x /usr/local/bin/worker-run ] || { echo "ERROR: worker-run dispatcher not installed"; exit 1; }
+[ -x /usr/local/bin/worker-run ] || { echo "ERROR: worker-run not installed"; exit 1; }
 
 for image in "$PROXY_IMAGE" "$PROMETHEUS_IMAGE" "$GRAFANA_IMAGE"; do
     docker image inspect "$image" > /dev/null \
@@ -1368,26 +1211,12 @@ curl -sfk https://localhost:8443 > /dev/null \
 [ -d "$WORKSHOP_DIR/labs/.terraform" ] \
     || { echo "ERROR: terraform init did not cache the provider"; exit 1; }
 
-# Whichever worker the lab repo shipped has to be RUNNABLE, not merely present.
-# Checked per stack rather than once, because the two failures look nothing alike:
-# a missing .venv and a missing .dll are found by different tests.
-if [ "$HAS_PYTHON" = 1 ]; then
-    [ -x "$WORKSHOP_DIR/labs/worker/.venv/bin/python" ] \
-        || { echo "ERROR: uv sync did not create labs/worker/.venv"; exit 1; }
-    (cd "$WORKSHOP_DIR/labs/worker" && uv run --offline python -c 'import temporalio' > /dev/null) \
-        || { echo "ERROR: labs/worker/.venv cannot import temporalio offline"; exit 1; }
-fi
-if [ "$HAS_DOTNET" = 1 ]; then
-    [ -f "$WORKSHOP_DIR/labs/worker/bin/Debug/net8.0/TrainingStarter.dll" ] \
-        || { echo "ERROR: the C# worker did not build"; exit 1; }
-fi
-
-# The dispatcher resolves to the same stack the build recorded. A mismatch here
-# means /etc/workshop-stack and the fetched labs/worker disagree, which is the one
-# failure that would make every worker command in the room wrong at once.
-[ -f /etc/workshop-stack ] || { echo "ERROR: /etc/workshop-stack was not written"; exit 1; }
-grep -qx "WORKER_STACK=$WORKER_STACK" /etc/workshop-stack \
-    || { echo "ERROR: /etc/workshop-stack does not record $WORKER_STACK"; exit 1; }
+# The worker has to be RUNNABLE, not merely present — a .venv that exists and
+# cannot import the SDK is the failure a student would otherwise find first.
+[ -x "$WORKSHOP_DIR/labs/worker/.venv/bin/python" ] \
+    || { echo "ERROR: uv sync did not create labs/worker/.venv"; exit 1; }
+(cd "$WORKSHOP_DIR/labs/worker" && uv run --offline python -c 'import temporalio' > /dev/null) \
+    || { echo "ERROR: labs/worker/.venv cannot import temporalio offline"; exit 1; }
 
 for f in lab1.tf lab2.tf lab5.tf proxy/config.yaml observability/docker-compose.yml; do
     [ -f "$WORKSHOP_DIR/labs/$f" ] || { echo "ERROR: missing lab file: labs/$f"; exit 1; }

@@ -33,7 +33,6 @@ description: |-
 icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
 tags:
 - python
-- dotnet
 - platform-engineering
 - temporal-cloud
 - temporal
