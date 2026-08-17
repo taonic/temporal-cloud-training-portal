@@ -18,14 +18,26 @@
       "type": "text",
       "title": "Read this first",
       "gridPos": {
-        "h": 4,
+        "h": 6,
         "w": 24,
         "x": 0,
         "y": 0
       },
       "options": {
         "mode": "markdown",
-        "content": "Metric names here match what `labs/worker` actually emits, verified against the endpoint. Two things to know before editing a query:\n\n- **Counters have no `_total`** \u2014 `temporal_workflow_completed`, not `..._total`. The OpenMetrics convention says otherwise and so does much of the internet, but Temporalio 1.17 does not add it, and `HasCounterTotalSuffix` makes no difference either way.\n- **Histograms end `_seconds_bucket`** only because the starter sets `HasUnitSuffix` and `UseSecondsForDuration`; the .NET defaults give you unsuffixed integer milliseconds.\n- **Gauges never take a suffix**: `temporal_num_pollers`.\n\nA wrong name returns an empty graph with no error. `curl -s localhost:9464/metrics | grep -E '^temporal_' | cut -d'{' -f1 | sort -u`"
+        "content": "Metric names here match what `labs/worker` actually emits, verified by curling the endpoint of a running .NET worker \u2014 not translated from a TypeScript or Java dashboard, where every one of them is spelled differently. Four rules explain every name below:\n\n- **Counters have no `_total`** \u2014 `temporal_workflow_completed`, not `..._total`. The OpenMetrics convention says otherwise and so does much of the internet, but Temporalio 1.17 does not add it, and `HasCounterTotalSuffix` makes no difference either way.\n- **Histograms end `_seconds_bucket`** only because the starter sets `HasUnitSuffix` and `UseSecondsForDuration`; the .NET defaults give you unsuffixed integer **milliseconds**. Dashboards written for other SDKs divide by 1000 for exactly this reason \u2014 do not copy that, or every latency here reads 1000\u00d7 too low.\n- **Gauges never take a suffix**: `temporal_num_pollers`, `temporal_worker_task_slots_available`.\n- **A counter that has never fired emits no series at all.** That is why failure panels wrap their query in `or vector(0)`: without it the panel goes blank precisely when nothing is wrong, which is indistinguishable from a broken query.\n\n**Not here, and not available:** CPU, heap and GC. The .NET SDK's Prometheus exporter emits Temporal Core's metrics only \u2014 there is no `process_cpu_usage` and no `jvm_memory_used_bytes` equivalent. For host metrics you would run a separate exporter alongside.\n\n`curl -s localhost:9464/metrics | grep -E '^temporal_' | cut -d'{' -f1 | sort -u`"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Triage \u2014 the questions to ask first",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
       }
     },
     {
@@ -36,7 +48,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 4
+        "y": 7
       },
       "fieldConfig": {
         "defaults": {
@@ -64,16 +76,17 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 4
+        "y": 7
       },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
-          "min": 0,
-          "max": 1,
           "custom": {
-            "fillOpacity": 8
-          }
+            "fillOpacity": 8,
+            "lineWidth": 2
+          },
+          "min": 0,
+          "max": 1
         },
         "overrides": []
       },
@@ -93,13 +106,14 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "custom": {
-            "fillOpacity": 8
+            "fillOpacity": 8,
+            "lineWidth": 2
           }
         },
         "overrides": []
@@ -120,13 +134,14 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 15
       },
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
           "custom": {
-            "fillOpacity": 8
+            "fillOpacity": 8,
+            "lineWidth": 2
           }
         },
         "overrides": []
@@ -152,16 +167,20 @@
     {
       "type": "stat",
       "title": "Pollers (gauge \u2014 no _total)",
-      "description": "Zero pollers means nothing is picking up work. First thing to check when someone says 'Temporal is broken'.",
+      "description": "Zero pollers means nothing is picking up work. First thing to check when someone says 'Temporal is broken'. The three poller types are workflow_task, sticky_workflow_task and activity_task \u2014 sticky pollers disappearing while the others stay is a cache problem, not a capacity one.",
       "gridPos": {
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 23
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -183,6 +202,473 @@
           "refId": "A",
           "expr": "sum(temporal_num_pollers) by (poller_type)",
           "legendFormat": "{{poller_type}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Latency \u2014 where the time actually goes",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Workflow end-to-end latency",
+      "description": "Schedule to close, as the caller experiences it. This is the number your users feel, and it is the sum of every other panel on this row plus the time your activities spend doing real work.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(temporal_workflow_endtoend_latency_seconds_bucket[5m])) by (le, workflow_type))",
+          "legendFormat": "p50 {{workflow_type}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum(rate(temporal_workflow_endtoend_latency_seconds_bucket[5m])) by (le, workflow_type))",
+          "legendFormat": "p95 {{workflow_type}}"
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(temporal_workflow_endtoend_latency_seconds_bucket[5m])) by (le, workflow_type))",
+          "legendFormat": "p99 {{workflow_type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Activity schedule-to-start p95 \u2014 the other queue",
+      "description": "The twin of the triage panel above, for activity tasks. Both can be bad independently: workflow tasks queue when the workflow worker is short of slots, activity tasks when the activity worker is. Watching only the workflow one is how a saturated activity worker hides. Note this metric carries no activity_type label \u2014 the task is queued before anyone knows what it is.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 29
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(temporal_activity_schedule_to_start_latency_seconds_bucket[5m])) by (le, task_queue))",
+          "legendFormat": "{{task_queue}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Workflow task execution p95",
+      "description": "How long your workflow code takes to produce commands once it has the task. Rising here with a healthy schedule-to-start means the bottleneck is your own code, not capacity \u2014 and anything approaching the 10s workflow task timeout is about to become a stuck workflow.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 37
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(temporal_workflow_task_execution_latency_seconds_bucket[5m])) by (le, workflow_type))",
+          "legendFormat": "{{workflow_type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Activity execution p95",
+      "description": "Time inside the activity function itself, split by activity_type \u2014 the only latency panel here that names the code doing the work. This is where you look when end-to-end latency moved and nothing else on this row did.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 37
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(temporal_activity_execution_latency_seconds_bucket[5m])) by (le, activity_type))",
+          "legendFormat": "{{activity_type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Activity end-to-end p99 (successful only)",
+      "description": "Schedule to close for activities that eventually SUCCEEDED, so it includes queueing and every retry along the way. Compare with execution p95 to your left: a wide gap is retries or queueing, and the metric is silent about activities that never succeeded at all.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 37
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum(rate(temporal_activity_succeed_endtoend_latency_seconds_bucket[5m])) by (le, activity_type))",
+          "legendFormat": "{{activity_type}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Replay and the sticky cache \u2014 the cost of forgetting",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Workflow task replay latency p95",
+      "description": "Time spent replaying history to rebuild state a cache eviction threw away. This is pure waste: identical result, more latency and CPU. It is the direct cost of the hit rate in the triage row, and it grows with history length \u2014 which is why long-running workflows and a small cache are a bad pairing. Blank until something is actually replayed.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(temporal_workflow_task_replay_latency_seconds_bucket[5m])) by (le, workflow_type))",
+          "legendFormat": "{{workflow_type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cached workflows",
+      "description": "How many workflow executions are currently held in the sticky cache. A gauge. Flat at your configured maximum with a falling hit rate means the cache is full and thrashing \u2014 that is the sizing signal.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(temporal_sticky_cache_size) by (task_queue)",
+          "legendFormat": "{{task_queue}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache hits, misses and forced evictions",
+      "description": "The three raw counters behind the hit rate, so you can tell WHICH way it moved. Rising forced evictions means the cache is under pressure; rising misses with flat evictions usually means new workflows rather than churn. All three take `or vector(0)` because a counter that has never fired emits nothing \u2014 on a healthy worker, evictions and misses are legitimately absent.",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 46
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(temporal_sticky_cache_hit[5m])) or vector(0)",
+          "legendFormat": "hit"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(temporal_sticky_cache_miss[5m])) or vector(0)",
+          "legendFormat": "miss"
+        },
+        {
+          "refId": "C",
+          "expr": "sum(rate(temporal_sticky_cache_total_forced_eviction[5m])) or vector(0)",
+          "legendFormat": "forced eviction"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Saturation \u2014 is the worker the bottleneck?",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Slot utilisation",
+      "description": "used / (used + available), per worker type. The single number for 'is this worker full'. Sustained near 1.0 with schedule-to-start climbing means add workers or raise the limit; near 0 with latency problems means the bottleneck is somewhere else entirely and more workers will not help. temporal_worker_task_slots_used is a gauge most SDK dashboards omit, which is why they can only show you half of this.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 55
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(temporal_worker_task_slots_used) by (worker_type) / clamp_min(sum(temporal_worker_task_slots_used) by (worker_type) + sum(temporal_worker_task_slots_available) by (worker_type), 1)",
+          "legendFormat": "{{worker_type}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Slots in use by worker type",
+      "description": "The absolute count behind the ratio. Three worker types share one process: WorkflowWorker, ActivityWorker and LocalActivityWorker, each with its own independent slot pool. Exhausting one does not touch the others, and tuning them as if they were one number is a common sizing mistake.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 55
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(temporal_worker_task_slots_used) by (worker_type)",
+          "legendFormat": "{{worker_type}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Network \u2014 your client's view of the service",
+      "collapsed": false,
+      "panels": [],
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Long polls per second",
+      "description": "PollWorkflowTaskQueue and PollActivityTaskQueue. These are long polls, so a steady non-zero rate is healthy \u2014 it is the sound of workers waiting for work, not of load. Dropping to zero while the worker is alive is the signal that it has stopped asking.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(temporal_long_request[5m])) by (operation, task_queue)",
+          "legendFormat": "{{operation}} {{task_queue}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests per second",
+      "description": "Ordinary (non-long-poll) gRPC calls this worker makes, by operation \u2014 RespondWorkflowTaskCompleted, RespondActivityTaskCompleted and friends. This is the traffic that counts against your namespace RPS limit, and comparing it with the Cloud dashboard's service_request_count is a good way to see how much of that limit is yours.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 64
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(temporal_request[5m])) by (operation)",
+          "legendFormat": "{{operation}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request failures by status code",
+      "description": "Both families, because they fail for different reasons: RESOURCE_EXHAUSTED here means you are being throttled, TRANSPORT_ERROR means the connection broke. Kill the network and you will see TRANSPORT_ERROR on the long-poll series within seconds. Normally empty \u2014 hence `or vector(0)`, without which an untouched worker renders a blank panel that looks exactly like a typo.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(temporal_request_failure[5m])) by (operation, status_code) or vector(0)",
+          "legendFormat": "{{operation}} {{status_code}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum(rate(temporal_long_request_failure[5m])) by (operation, status_code) or vector(0)",
+          "legendFormat": "long: {{operation}} {{status_code}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Request latency p95",
+      "description": "Round-trip time to the Temporal frontend for ordinary calls. This is network plus service, measured from inside your process, and it is the honest answer to 'is it us or is it them' \u2014 the one question the Cloud metrics cannot settle, because they only ever see their own side. Long polls are excluded on purpose: they are supposed to be slow.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(temporal_request_latency_seconds_bucket[5m])) by (le, operation))",
+          "legendFormat": "{{operation}}"
         }
       ]
     }

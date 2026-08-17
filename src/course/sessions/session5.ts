@@ -214,10 +214,22 @@ export const session5: SessionDef = {
     {
       label: 'Read both dashboards side by side and answer six questions',
       expect:
-        'From **Worker health**: what is p99 workflow-task schedule-to-start, what is the sticky ' +
-        'cache hit rate, how many task slots stay free. From **Cloud overview**: what is your sync ' +
-        'match rate, how many Actions has this lab burned, and is anything in the task queue ' +
-        'backlog. Notice that no single dashboard could have answered all six.',
+        'From **Worker health** — five rows, read top to bottom the way you would in an incident: ' +
+        '*Triage*, *Latency*, *Replay and the sticky cache*, *Saturation*, *Network*. Answer three: ' +
+        'what is p99 workflow-task schedule-to-start, what is your slot utilisation per worker type, ' +
+        'and where does the time in a single workflow actually go. From **Cloud overview**: what is ' +
+        'your sync match rate, how many Actions has this lab burned, and is anything sitting in the ' +
+        'task queue backlog. No single dashboard could have answered all six.',
+    },
+    {
+      label: 'Find the queue the triage row does not show you',
+      expect:
+        'The *Latency* row carries **two** schedule-to-start panels, not one. Workflow tasks queue ' +
+        'when the workflow worker is short of slots; activity tasks queue when the activity worker ' +
+        'is — three independent slot pools in one process, and exhausting one does not touch the ' +
+        'others. Almost every worker dashboard in circulation graphs only the workflow side, which ' +
+        'is precisely how a saturated activity worker hides in plain sight. Check both against the ' +
+        '*Saturation* row and say which pool is actually your constraint.',
     },
     {
       label: 'Now break something and watch both sides disagree',
@@ -382,12 +394,36 @@ output "metrics_api_key" {
           'percentiles, which arrive pre-computed and cannot be re-aggregated.',
       },
       {
+        label: 'SDK: the OTHER queue — activity tasks',
+        command:
+          'histogram_quantile(0.95,\n  sum(rate(temporal_activity_schedule_to_start_latency_seconds_bucket[5m])) by (le, task_queue)\n)',
+        expect:
+          'The twin of the query above, and the one most worker dashboards leave out. A process runs ' +
+          'three independent slot pools — WorkflowWorker, ActivityWorker, LocalActivityWorker — so ' +
+          'activity tasks can be queueing badly while workflow tasks are perfectly healthy. Note ' +
+          'this metric carries no `activity_type` label: the task is queued before anyone knows what ' +
+          'it is, which is also why you cannot alert per-activity on it.',
+      },
+      {
+        label: 'SDK: how full is the worker, really?',
+        command:
+          'sum(temporal_worker_task_slots_used) by (worker_type)\n/\nclamp_min(\n  sum(temporal_worker_task_slots_used) by (worker_type)\n  + sum(temporal_worker_task_slots_available) by (worker_type),\n  1\n)',
+        expect:
+          'Utilisation per worker type, 0 to 1. Most SDK dashboards graph only `_available` and can ' +
+          'therefore never show you a ratio — a raw count of free slots means nothing until you know ' +
+          'what it started from. Read this next to schedule-to-start: pinned near 1.0 with latency ' +
+          'climbing means add capacity; near 0 with latency climbing means your bottleneck is ' +
+          'somewhere else and more workers will not touch it.',
+      },
+      {
         label: 'SDK: is replay being avoided? (counters — no suffix)',
         command:
           '(sum(rate(temporal_sticky_cache_hit[5m])) or vector(0))\n/\nclamp_min(\n  (sum(rate(temporal_sticky_cache_hit[5m])) or vector(0))\n  + (sum(rate(temporal_sticky_cache_miss[5m])) or vector(0)),\n  0.001\n)',
         expect:
           'High. A low hit rate means workflows are evicted and replayed from history — same result, ' +
-          'more latency and CPU. It is a sizing signal, not a correctness one.',
+          'more latency and CPU. It is a sizing signal, not a correctness one. For what it actually ' +
+          'costs, put `temporal_workflow_task_replay_latency_seconds_bucket` next to it — that is ' +
+          'the hit rate denominated in seconds rather than in percent.',
       },
       {
         label: 'SDK: the metric that catches a stuck workflow',

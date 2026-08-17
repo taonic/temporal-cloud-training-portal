@@ -32,6 +32,16 @@ import anything.
 | **Temporal Worker health** | the `temporal-sdk` job | written for this workshop |
 | **Temporal Cloud overview** | the `temporal-cloud` job | [grafana/jsonnet-libs `temporal-mixin`](https://github.com/grafana/jsonnet-libs/blob/master/temporal-mixin/dashboards/temporal-overview.json), vendored |
 
+Worker health is organised in five rows, roughly in the order you would read them during an incident:
+
+| Row | Answers |
+|---|---|
+| **Triage** | Is anyone polling, is work queueing, is the worker full, is anything failing |
+| **Latency** | Where the time goes — end-to-end, both schedule-to-start queues, workflow task and activity execution |
+| **Replay and the sticky cache** | What eviction is costing you, in seconds of replay |
+| **Saturation** | Slot utilisation per worker type, from `used` *and* `available` |
+| **Network** | Long polls, request rate, failures by status code, and round-trip latency to the frontend |
+
 The Cloud overview is the dashboard Temporal's own docs point you at, vendored here rather than
 imported so it provisions with no Grafana Cloud account. Every panel and query is upstream's; the
 only edits are presentational — title, `editable`, timezone, a 3-hour default window and a 30s
@@ -264,6 +274,51 @@ at the raw endpoint rather than trust any of the above:
 ```bash
 curl -s localhost:9464/metrics | grep -E '^temporal_' | cut -d'{' -f1 | sort -u
 ```
+
+### Porting a dashboard written for another SDK
+
+Almost every Temporal dashboard you will find online was written against the Java or TypeScript SDK,
+and **not one of its queries runs unmodified here**. The underlying metrics are the same — .NET,
+TypeScript, Python and Ruby all sit on the same Rust core — but the Prometheus exporter names them
+differently per SDK and per configuration. This table is the mapping, measured by running this
+worker and diffing the endpoint against
+[a TypeScript worker-tuning dashboard](https://github.com/taonic/temporal-training-operations-typescript/blob/main/worker-tuning/dashboard/sdk_metrics.json):
+
+| In a TS/Java dashboard | Here (.NET, `labs/worker` options) |
+|---|---|
+| `..._latency_bucket`, then `/ 1000` | `..._latency_seconds_bucket`, **no division** |
+| `temporal_request_total` | `temporal_request` |
+| `temporal_long_request_total` | `temporal_long_request` |
+| `temporal_request_failure_total` | `temporal_request_failure` |
+| `temporal_long_request_failure_total` | `temporal_long_request_failure` |
+| `temporal_sticky_cache_hit_total` | `temporal_sticky_cache_hit` |
+| `temporal_sticky_cache_miss_total` | `temporal_sticky_cache_miss` |
+| `temporal_sticky_cache_total_forced_eviction_total` | `temporal_sticky_cache_total_forced_eviction` |
+| `temporal_sticky_cache_size`, `temporal_worker_task_slots_available` | unchanged — gauges never took a suffix |
+| `temporal_poller_start_total` | **not emitted.** Use `temporal_num_pollers` (gauge) |
+| `process_cpu_usage`, `jvm_memory_used_bytes`, `jvm_memory_max_bytes` | **not emitted.** See below |
+
+The `/ 1000` is the one that will not announce itself. Those dashboards divide because their exporter
+reports integer milliseconds; ours reports seconds, so keeping the division renders every latency a
+thousand times too small — a plausible-looking graph that is simply wrong, which is worse than a
+blank one.
+
+**There are no host metrics.** The .NET SDK's Prometheus exporter publishes Temporal Core's metrics
+and nothing else — no CPU, no heap, no GC, no `process_*` at all. Any dashboard with a "Compute" row
+built on `process_cpu_usage` loses it here. In production you would run a separate exporter, or the
+OpenTelemetry .NET runtime instrumentation, alongside on its own port and correlate in Grafana.
+
+Three metrics worth knowing that the TS dashboard does not use, and which are on Worker health here:
+
+| Metric | Why it earns a panel |
+|---|---|
+| `temporal_worker_task_slots_used` | The `available` gauge alone cannot give you a utilisation *ratio*; with both you get one number for "is this worker full" |
+| `temporal_workflow_task_replay_latency_seconds` | Puts the cost of a cache eviction in seconds, rather than leaving it as an abstract hit rate |
+| `temporal_num_pollers{poller_type=...}` | Splits `workflow_task`, `sticky_workflow_task` and `activity_task`. Sticky pollers vanishing while the others hold is a cache problem, not a capacity one |
+
+And two more the endpoint emits that no panel uses, in case you want them:
+`temporal_activity_task_received` (carries an `eager` label, for eager activity dispatch) and
+`temporal_workflow_task_queue_poll_succeed`.
 
 The same move works on the Cloud side, and there it is cheap in a way the scrape is not —
 `/v1/descriptors` returns every metric with its help text and its available labels, and it is not
