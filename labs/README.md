@@ -77,7 +77,7 @@ and nothing reads it if your sandbox still exports it.)
 |---|---|
 | `lab1.tf` | Namespace, region, retention, and the one `provisioner` tag block |
 | `lab2.tf` | Namespace-scoped Worker service account, its API key, operators group and access |
-| `lab3.tf` | Metrics Read-Only service account, its API key, and the dashboard/alert catalogue tag |
+| `lab3.tf` | Metrics Read-Only service account and its API key |
 | `lab4.tf` | Nothing — you are a caller on your instructor's Nexus endpoint, and the artifact is a workflow history |
 | `lab5.tf` | Runbook and escalation tag |
 

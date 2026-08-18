@@ -82,8 +82,10 @@ and no longer does — it is kept so you know not to go looking for it.
 - [ ] **Session 4 needs a namespace of your own and ten minutes.** You host the Risk Desk: a desk
       namespace the students cannot reach, an account-global Nexus endpoint, and their namespaces on
       its allowlist. The allowlist cannot be built until the room has finished Session 1, so this is
-      a during-the-day step — `pnpm ops:setup-nexus-endpoint <desk-namespace>` does the whole thing. Do
-      rehearse it beforehand against a dev server; see [Session 4](#session-by-session-notes).
+      a during-the-day step — `pnpm ops:setup-nexus-endpoint <desk-namespace>` does the whole thing,
+      and it now watches the account and allows namespaces as they appear, so it is one terminal you
+      start and forget. Do rehearse it beforehand against a dev server; see
+      [Session 4](#session-by-session-notes).
 
 ### T-minus 1 day
 
@@ -282,17 +284,23 @@ provision in `lab4.tf` and no tag to write: the artifact of this lab is a workfl
    top of `.env`, so only the differing keys are needed. It is gitignored.
 3. `pnpm ops:setup-nexus-endpoint <desk-namespace>` — reads the account, finds every `training-*`
    namespace, and makes the endpoint match: creates it the first time, updates the allowlist every
-   time after, and **waits for the change to reach the data plane** before returning. Re-run it
-   whenever the roster changes — a latecomer arrives, someone re-runs Lab 1 under a new name.
+   time after, and **waits for the change to reach the data plane** before reporting it live.
 
-   It is idempotent in the strong sense: it compares the spec the endpoint should have against the
-   one it has, and calls nothing at all when they agree. A second run is a read. That matters because
-   this is a command you run mid-session with a room watching, sometimes twice because you cannot
-   remember whether the first one took.
+   **It watches by default**, re-reading the account every 5 seconds, so start it when Session 1
+   starts and leave it in a spare terminal through the Nexus segment. A student who finishes Lab 1
+   late, or re-runs it under a different name, is allowed within seconds and you never touch the
+   terminal. Ctrl-C when the segment is over; stopping the watch changes nothing.
 
-   Useful flags: `--dry-run` shows the diff and sends nothing; `--revoke <ns>` leaves one caller off,
-   which is how you set up round 2; `--allow <ns>` adds a caller that does not match the lab prefix.
-   To restore a revoked caller, run it again with no `--revoke`.
+   It is idempotent in the strong sense: each pass compares the spec the endpoint should have against
+   the one it has, and calls nothing at all when they agree. That is what makes a 5-second loop
+   reasonable — a steady state is two reads and no writes, and the terminal stays silent until the
+   roster actually moves.
+
+   Useful flags: `--once` is the old one-shot run; `--interval <sec>` changes the cadence;
+   `--dry-run` shows the diff and sends nothing (and implies `--once`); `--revoke <ns>` keeps one
+   caller off, which is how you set up round 2 — the watch re-applies it every pass, so it stays
+   revoked until you Ctrl-C and restart without the flag; `--allow <ns>` adds a caller that does not
+   match the lab prefix.
 
    Deliberately not Terraform. The endpoint is a live classroom control you change while talking, and
    plan/apply is the wrong instrument for that. It is also account-global, so a state file that

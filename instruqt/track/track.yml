@@ -32,8 +32,8 @@ description: |-
      the symptoms, recover, and write the runbook.
 icon: https://storage.googleapis.com/instruqt-frontend/img/tracks/default.png
 tags:
-- python
 - platform-engineering
+- python
 - temporal-cloud
 - temporal
 - terraform
@@ -64,5 +64,5 @@ lab_config:
   hideStopButton: true
   default_layout: AssignmentLeft
   default_layout_sidebar_size: 35
-checksum: "3233638012024697940"
+checksum: "66290899904669024"
 enhanced_loading: false

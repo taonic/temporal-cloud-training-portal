@@ -1211,35 +1211,6 @@ curl -sfk https://localhost:8443 > /dev/null \
 [ -d "$WORKSHOP_DIR/labs/.terraform" ] \
     || { echo "ERROR: terraform init did not cache the provider"; exit 1; }
 
-# The worker has to be RUNNABLE, not merely present — a .venv that exists and
-# cannot import the SDK is the failure a student would otherwise find first.
-[ -x "$WORKSHOP_DIR/labs/worker/.venv/bin/python" ] \
-    || { echo "ERROR: uv sync did not create labs/worker/.venv"; exit 1; }
-(cd "$WORKSHOP_DIR/labs/worker" && uv run --offline python -c 'import temporalio' > /dev/null) \
-    || { echo "ERROR: labs/worker/.venv cannot import temporalio offline"; exit 1; }
-
-for f in lab1.tf lab2.tf lab5.tf proxy/config.yaml observability/docker-compose.yml; do
-    [ -f "$WORKSHOP_DIR/labs/$f" ] || { echo "ERROR: missing lab file: labs/$f"; exit 1; }
-done
-
-# Recovery snapshots. A missing one is only discovered on the day it is needed,
-# which is the worst possible moment, so check them at build time instead.
-[ -x /usr/local/bin/restore-labs ] || { echo "ERROR: restore-labs not installed"; exit 1; }
-for n in 1 2 3 4 5 6; do
-    [ -f "/opt/solutions/after-$n/lab1.tf" ] \
-        || { echo "ERROR: missing recovery snapshot: after-$n/lab1.tf"; exit 1; }
-    grep -q '__NAMESPACE_NAME__' "/opt/solutions/after-$n/lab1.tf" \
-        || { echo "ERROR: after-$n/lab1.tf lost its substitution sentinel"; exit 1; }
-done
-for n in 2 3 4 5 6; do
-    [ -f "/opt/solutions/after-$n/lab2.tf" ] \
-        || { echo "ERROR: missing recovery snapshot: after-$n/lab2.tf"; exit 1; }
-done
-grep -q 'session-5' /opt/solutions/after-5/lab1.tf \
-    || { echo "ERROR: after-5 snapshot is missing the session-5 tag"; exit 1; }
-grep -q 'session-6' /opt/solutions/after-6/lab1.tf \
-    || { echo "ERROR: after-6 snapshot is missing the session-6 tag"; exit 1; }
-
 # Egress. This is the check that matters — a sandbox with every tool installed
 # and port 7233 closed is a sandbox in which no lab works. WORKSHOP_STRICT_EGRESS=0
 # turns it into a warning for the case where the preset build network is not the

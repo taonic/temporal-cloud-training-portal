@@ -1,4 +1,3 @@
-import { namespaceTags } from '@/cloud/ops';
 import { accountRoleOf } from '@/cloud/types';
 import { LAB_TASK_QUEUE } from '../naming';
 import type { SessionDef } from '../types';
@@ -23,8 +22,8 @@ import type { SessionDef } from '../types';
  *
  * That change also fixes the weakest grading in the workshop. The dashboard
  * still lives in the student's sandbox where the portal cannot see it, but the
- * IDENTITY the scraper runs as is control-plane state, so two of the five
- * checkpoints below are now facts about the account rather than claims.
+ * IDENTITY the scraper runs as is control-plane state, so half of the four
+ * checkpoints below are facts about the account rather than claims.
  *
  * The one thing that does not go away is the rate limit, and it is a genuinely
  * account-global control: 180 requests per hour for the WHOLE account, shared
@@ -243,13 +242,12 @@ export const session3: SessionDef = {
         'most wanted to read.',
     },
     {
-      label: 'Decide one paging alert and one ticket alert, and record where they live',
-      command: `# add to the temporalcloud_namespace_tags "lab" block in lab1.tf:\n#   "session-3" = "<your doc link>"`,
+      label: 'Decide one paging alert and one ticket alert',
       expect:
-        'Write both into a document with the dashboard link, then record it as a tag. Add to the ' +
-        'existing block rather than writing a second one — it manages the namespace\'s COMPLETE tag ' +
-        'set, and a second declaration would delete every tag the earlier sessions set.',
-      grades: 'session-3-documented',
+        'One that wakes somebody and one that waits until morning, each with the metric, the ' +
+        'threshold and the window you would actually keep. Write them down with the dashboard link ' +
+        'so the room can compare — the argument about which is which is the point of the exercise, ' +
+        'and it is the conversation nobody has until the first 03:00 page.',
     },
   ],
 
@@ -303,22 +301,7 @@ resource "temporalcloud_apikey" "metrics" {
 output "metrics_api_key" {
   value     = temporalcloud_apikey.metrics.token
   sensitive = true
-}
-
-# NOT here, and not anywhere: temporalcloud_metrics_endpoint. That is the older
-# mTLS metrics endpoint, and it sets ONE account-global client CA — applying it
-# replaces your instructor's and every other student's. The OpenMetrics endpoint
-# above needs no CA at all, which is most of why it exists.
-#
-# Finally, the tag. ADD this key to the temporalcloud_namespace_tags "lab" block
-# in lab1.tf. Do not declare a second block: that resource manages the COMPLETE
-# tag set, so a second one deletes every tag Sessions 1 and 2 wrote.
-#
-#   tags = {
-#     provisioner = "terraform"
-#     ...
-#     "session-3" = "<link to your dashboard and alert catalogue>"
-#   }`,
+}`,
 
   use: ({ namespaceName }) => ({
     intro:
@@ -496,15 +479,6 @@ output "metrics_api_key" {
         'dashboard you can read needs load — and the Cloud metrics need a few one-minute windows ' +
         'with something in them before any panel has a shape.',
     },
-    {
-      id: 'session-3-documented',
-      title: 'Dashboard and alert catalogue recorded',
-      detail:
-        'Looks for a `session-3` namespace tag. Your Grafana runs in your sandbox and the portal ' +
-        'cannot reach it — this records that you built it, and verifies nothing about what is on it. ' +
-        'What the portal CAN now verify is the identity your scraper runs as, above.',
-      selfAttested: true,
-    },
   ],
 
   async grade(ctx) {
@@ -547,15 +521,6 @@ output "metrics_api_key" {
           ),
         ];
 
-    /* -- The tag: a claim, and labelled as one --------------------------- */
-    const tag = (namespaceTags(ns)['session-3'] ?? '').trim();
-    const documented = ctx.check(
-      'session-3-documented',
-      tag !== '',
-      `Documented at ${tag}`,
-      'No session-3 tag on your namespace.',
-    );
-
     /* -- The data plane: proof a worker ran ------------------------------ */
     const reader = await ctx.dataPlane();
     if (!reader) {
@@ -563,7 +528,6 @@ output "metrics_api_key" {
         ...identity,
         ctx.mk('worker-polled', 'blocked', 'Cannot reach your namespace.'),
         ctx.mk('load-generated', 'blocked', 'Cannot reach your namespace.'),
-        documented,
       ];
     }
 
@@ -590,7 +554,6 @@ output "metrics_api_key" {
           ? `Only ${completed} completed execution(s). Run: uv run lab3_metrics.py load --count 50`
           : 'Could not query your namespace.',
       ),
-      documented,
     ];
   },
 };

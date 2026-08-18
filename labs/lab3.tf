@@ -20,10 +20,10 @@
 #     the person.
 #   · an output for the key, marked sensitive, so you can get it into
 #     labs/observability/cloud-api-key without it landing in a config file.
-#   · the key(s) below ADDED to the temporalcloud_namespace_tags "lab" block you
-#     created in lab1.tf. That resource manages the COMPLETE tag set for the
-#     namespace, so declaring a second one here would delete every tag the earlier
-#     sessions wrote — and turn their green checkpoints red.
+#
+# Nothing else. There is no tag to write in this lab: the dashboard and the alert
+# catalogue live in your sandbox, and the checkpoints grade the scraper's IDENTITY
+# — which is control-plane state — rather than a claim that you built one.
 #
 # Note what "metricsread" is NOT. It is an ACCOUNT role: it reads metrics for
 # every namespace in bvmon, not just yours. There is no namespace-scoped form of
